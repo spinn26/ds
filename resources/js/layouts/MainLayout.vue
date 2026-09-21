@@ -2,50 +2,36 @@
   <v-layout>
     <!-- Sidebar -->
     <v-navigation-drawer v-model="drawer" :permanent="!mobile" :temporary="mobile"
-      :rail="rail && !mobile" :width="260" :rail-width="72"
+      :rail="rail && !mobile" :width="248" :rail-width="72"
       class="sidebar-drawer">
-      <div class="sidebar-header d-flex align-center pa-4" :class="{ 'justify-center': rail }">
-        <div v-if="!rail" class="flex-grow-1">
-          <div class="d-flex align-center ga-1">
-            <img v-if="design.logoUrl" :src="design.logoUrl" alt="logo" style="max-height: 26px" />
-            <template v-else>
-              <span class="text-h6 font-weight-black text-primary">{{ design.logoText }}</span>
-              <span class="text-caption text-medium-emphasis">{{ brandSuffix }}</span>
-            </template>
-          </div>
-          <div v-if="cabinetName" class="text-caption" style="font-size: 0.6rem; letter-spacing: 1px; opacity: 0.6; margin-top: -2px">
-            {{ cabinetName }}
-          </div>
-        </div>
+      <!-- Марка набрана шрифтом: отдельного файла логотипа в системе нет
+           (per ds-redesign/design/BRAND.md). Загруженный в админке логотип
+           по-прежнему главнее плашки. -->
+      <div class="sidebar-header" :class="{ 'sidebar-header--rail': rail }">
+        <router-link to="/" class="sidebar-brand">
+          <img v-if="design.logoUrl" :src="design.logoUrl" alt="" class="sidebar-logo" />
+          <span v-else class="sidebar-mark">{{ design.logoText }}</span>
+          <span v-if="!rail" class="sidebar-brand-text">
+            <span class="sidebar-brand-name">{{ brandSuffix }}</span>
+            <span v-if="cabinetName" class="sidebar-brand-sub">{{ cabinetName }}</span>
+          </span>
+        </router-link>
         <v-btn v-if="mobile" icon="mdi-close" size="small" variant="text" density="comfortable"
-          @click="drawer = false" />
-        <v-btn v-else-if="!rail" icon="mdi-chevron-left" size="x-small" variant="text" density="comfortable"
-          @click="toggleRail" />
-        <v-btn v-else icon="mdi-chevron-right" size="x-small" variant="text" density="comfortable"
+          aria-label="Закрыть меню" @click="drawer = false" />
+        <v-btn v-else icon="mdi-dock-left" size="small" variant="text" density="comfortable"
+          :aria-label="rail ? 'Развернуть меню' : 'Свернуть меню'"
+          :title="rail ? 'Развернуть меню' : 'Свернуть меню'"
           @click="toggleRail" />
       </div>
       <v-divider />
 
-      <!-- Поиск по меню. При восьмидесяти пунктах это основной способ
-           навигации: Ctrl+K ставит фокус, Esc очищает. -->
-      <div v-if="!rail" class="px-3 pt-3 pb-2">
-        <v-text-field ref="menuSearchEl" v-model="menuQuery"
-          density="compact" variant="outlined" hide-details rounded="lg"
-          placeholder="Поиск по меню" prepend-inner-icon="mdi-magnify"
-          clearable @keydown.esc="menuQuery = ''">
-          <template v-if="!menuQuery && !isStaff" #append-inner>
-            <span class="menu-kbd">Ctrl K</span>
-          </template>
-        </v-text-field>
-      </div>
-      <div v-else class="d-flex justify-center pt-2">
-        <v-btn icon="mdi-magnify" size="small" variant="text" density="comfortable"
-          title="Поиск по меню" @click="focusMenuSearch" />
-      </div>
+      <!-- Поиск по меню переехал в шапку: там же палитра Ctrl K, которая
+           ищет и разделы, и данные (per design/components/Sidebar.md).
+           В меню остаётся только навигация. -->
 
       <!-- Переключатель пространств — только тем, у кого есть и кабинет,
            и управление. Чистый партнёр или чистый сотрудник его не видит. -->
-      <div v-if="!rail && hasBothSpaces && !menuQuery" class="px-3 pb-2">
+      <div v-if="!rail && hasBothSpaces" class="px-3 pb-2">
         <div class="menu-space-toggle">
           <button type="button" :class="{ active: activeSpace === 'cabinet' }"
             @click="setSpace('cabinet')">Кабинет</button>
@@ -113,6 +99,15 @@
     <!-- Top bar -->
     <v-app-bar flat border="b" class="topbar">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
+
+      <!-- Поиск живёт в шапке и открывает палитру (per design/components/Topbar.md).
+           Выглядит полем, а не кнопкой: поле подсказывает, что сюда можно
+           печатать. Сама палитра слушает Ctrl K глобально. -->
+      <button type="button" class="topbar-search" @click="openGlobalSearch">
+        <v-icon size="18">mdi-magnify</v-icon>
+        <span class="topbar-search-ph">{{ isStaff ? 'Поиск по разделам и данным' : 'Поиск по разделам' }}</span>
+        <span v-if="!mobile" class="menu-kbd">Ctrl K</span>
+      </button>
 
       <!-- Вход под пользователем. Полоса обязана быть заметной: действия под
            чужой учёткой пишутся в аудит от её имени. Раньше признака не было
@@ -184,13 +179,6 @@
         </v-badge>
       </v-btn>
 
-      <!-- Сквозной поиск по данным: партнёр, клиент, контракт из любого
-           места. До него бэкофису приходилось сперва открыть нужный раздел. -->
-      <v-btn v-if="isStaff" size="small" variant="tonal" class="mr-2"
-        prepend-icon="mdi-magnify" @click="openGlobalSearch">
-        Поиск
-        <span v-if="!mobile" class="menu-kbd ml-2">Ctrl K</span>
-      </v-btn>
 
       <template v-if="!mobile">
         <!-- Referral link copy button (only for consultants with active status) -->
@@ -435,39 +423,6 @@
     <!-- Глобальный confirm-диалог (per useConfirm()). Mount-once-per-app. -->
     <ConfirmDialog ref="confirmRef" />
 
-    <!-- Сквозной поиск: партнёры, клиенты, контракты -->
-    <v-dialog v-model="gsOpen" max-width="640" scrollable @after-enter="focusGlobalSearch">
-      <v-card>
-        <v-card-text class="pb-2">
-          <v-text-field ref="gsField" v-model="gsQuery" autofocus
-            density="comfortable" variant="outlined" hide-details rounded="lg"
-            placeholder="ФИО партнёра или клиента, номер контракта, ID"
-            prepend-inner-icon="mdi-magnify" clearable
-            :loading="gsLoading" @keydown.esc="gsOpen = false" />
-        </v-card-text>
-
-        <v-divider />
-
-        <v-card-text style="max-height: 60vh" class="pt-2">
-          <div v-if="gsQuery.trim().length < 2" class="text-body-2 text-medium-emphasis py-4 text-center">
-            Введите хотя бы два символа
-          </div>
-          <div v-else-if="!gsLoading && !gsGroups.length" class="text-body-2 text-medium-emphasis py-4 text-center">
-            Ничего не нашлось
-          </div>
-          <template v-for="g in gsGroups" :key="g.title">
-            <div class="text-caption text-medium-emphasis mt-2 mb-1 d-flex align-center ga-2">
-              <v-icon size="14">{{ g.icon }}</v-icon>{{ g.title }}
-            </div>
-            <v-list density="compact" class="pa-0">
-              <v-list-item v-for="it in g.items" :key="g.title + it.id"
-                :title="it.title" :subtitle="it.subtitle"
-                @click="goToResult(it)" />
-            </v-list>
-          </template>
-        </v-card-text>
-      </v-card>
-    </v-dialog>
 
     <!-- Глобальный snackbar (per useSnackbar()). Все .showError/.showSuccess
          из любого компонента отрисуются здесь. -->
@@ -536,9 +491,9 @@
       @completed="onQuestionnaireCompleted"
     />
 
-    <!-- Глобальный поиск (Ctrl+K). Слушает keydown глобально, можно
-         открыть программно через ref. -->
-    <GlobalSearch />
+    <!-- Палитра Ctrl K: разделы меню всем, поиск по данным — сотрудникам.
+         Слушает keydown глобально, открывается и по клику в шапке. -->
+    <GlobalSearch ref="paletteRef" :sections="paletteSections" :data-search="isStaff" />
 
     <!-- Плавающий виджет «Мои чаты» снизу-справа.
          Скрывается на самой странице чата. -->
@@ -1164,47 +1119,12 @@ async function loadCalcState() {
 }
 onMounted(loadCalcState);
 
-// ---- Сквозной поиск по данным ----
-// Отдельно от поиска по меню: там разделы, здесь люди и договоры. Разделы,
-// на которые у сотрудника нет прав, отсекает бэкенд.
-const gsOpen = ref(false);
-const gsQuery = ref('');
-const gsGroups = ref([]);
-const gsLoading = ref(false);
-const gsField = ref(null);
-let gsTimer = null;
-let gsSeq = 0;
-
-function openGlobalSearch() { gsOpen.value = true; }
-function focusGlobalSearch() { nextTick(() => gsField.value?.focus?.()); }
-
-function goToResult(item) {
-  gsOpen.value = false;
-  gsQuery.value = '';
-  gsGroups.value = [];
-  if (item?.path) router.push(item.path);
-}
-
-watch(gsQuery, (q) => {
-  clearTimeout(gsTimer);
-  const term = (q || '').trim();
-  if (term.length < 2) { gsGroups.value = []; gsLoading.value = false; return; }
-  gsLoading.value = true;
-  gsTimer = setTimeout(async () => {
-    // Порядковый номер: ответы могут прийти не в том порядке, в каком ушли,
-    // и старый затёр бы свежий.
-    const seq = ++gsSeq;
-    try {
-      const { data } = await api.get('/admin/search', { params: { q: term } });
-      if (seq !== gsSeq) return;
-      gsGroups.value = data.groups || [];
-    } catch {
-      if (seq === gsSeq) gsGroups.value = [];
-    } finally {
-      if (seq === gsSeq) gsLoading.value = false;
-    }
-  }, 250);
-});
+// ---- Палитра поиска ----
+// Раньше поисков было два: диалог по данным здесь и компонент GlobalSearch,
+// оба на Ctrl+K. Остался один — сам компонент; запрос к /admin/search живёт
+// внутри него. Здесь только ссылка, чтобы открывать палитру по клику в шапке.
+const paletteRef = ref(null);
+function openGlobalSearch() { paletteRef.value?.open(); }
 const quickMsg = ref({ open: false, subject: '', icon: 'mdi-email-edit', message: '', anonymous: false, sending: false });
 
 function openQuickMsg(subject, icon = 'mdi-email-edit') {
@@ -1612,28 +1532,30 @@ function togglePin(item) {
   localStorage.setItem(PINNED_KEY, JSON.stringify(next));
 }
 
-// ---- Поиск по меню ----
-const menuQuery = ref('');
-const menuSearchEl = ref(null);
-
-function focusMenuSearch() {
-  rail.value = false;
-  nextTick(() => menuSearchEl.value?.focus?.());
-}
-
-// Ctrl/Cmd+K — фокус в поиск меню. Вешаем на document, снимаем при уходе.
-function onMenuHotkey(e) {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-    e.preventDefault();
-    // У сотрудника Ctrl+K уходит на поиск по ДАННЫМ: разделы он и так помнит,
-    // а людей и договоры ищет весь день. Партнёру искать нечего — ему
-    // сочетание по-прежнему ставит фокус в поиск по меню.
-    if (isStaff.value) { openGlobalSearch(); return; }
-    focusMenuSearch();
+// ---- Разделы для палитры Ctrl K ----
+// Поиск по меню жил в сайдбаре отдельным полем, а у сотрудника Ctrl+K уходил
+// на поиск по данным — два разных поиска на одно сочетание. Теперь разделы
+// отдаём в палитру, и она одна на всех: у партнёра — разделы, у сотрудника —
+// разделы плюс люди и договоры.
+const paletteSections = computed(() => {
+  const out = [];
+  let group = null;
+  for (const item of visibleMenu.value) {
+    if (item.group) { group = item.group; continue; }
+    if (! item.label || ! item.path) continue;
+    out.push({
+      type: 'section',
+      title: item.label,
+      icon: item.icon,
+      url: item.path,
+      // Пространство подписываем только тем, у кого их два: остальным
+      // «Кабинет» в каждой строке — шум.
+      subtitle: [hasBothSpaces.value ? (spaceOf(item) === 'manage' ? 'Управление' : 'Кабинет') : null, group]
+        .filter(Boolean).join(' · '),
+    });
   }
-}
-onMounted(() => document.addEventListener('keydown', onMenuHotkey));
-onUnmounted(() => document.removeEventListener('keydown', onMenuHotkey));
+  return out;
+});
 
 // Сворачиваемые разделы бокового меню. Выбор пользователя сохраняется в
 // localStorage; при первом заходе (ключа ещё нет) свёрнуты все, кроме той
@@ -1663,25 +1585,6 @@ function toggleGroup(name) {
 // Всё, что меняет состав и порядок (пространство, закреплённое, поиск),
 // собрано здесь — шаблон остаётся одним циклом по плоскому списку.
 const navMenu = computed(() => {
-  // Поиск идёт по обоим пространствам сразу: искать в том, где пункта нет, —
-  // ровно та проблема, из-за которой поиск и понадобился.
-  if (menuQuery.value.trim()) {
-    const q = menuQuery.value.trim().toLowerCase();
-    let group = null;
-    const out = [];
-    for (const item of visibleMenu.value) {
-      if (item.group) { group = item.group; continue; }
-      if (! item.label || ! item.label.toLowerCase().includes(q)) continue;
-      out.push({
-        ...item,
-        _groupKey: null,           // в поиске ничего не сворачиваем
-        _hint: [spaceOf(item) === 'manage' ? 'Управление' : 'Кабинет', group]
-          .filter(Boolean).join(' · '),
-      });
-    }
-    return [{ group: `Найдено: ${out.length}`, _plain: true }, ...out];
-  }
-
   const inSpace = (item) => {
     const s = spaceOf(item);
     return s === 'both' || s === activeSpace.value;
@@ -1756,21 +1659,107 @@ watch(
 </script>
 
 <style scoped>
+/* Каркас v2 (per ds-redesign/design/components/Sidebar.md и Topbar.md).
+   Цвета — только токенами: ни одного хардкод-hex, иначе тёмная тема
+   разъедется. */
 .sidebar-drawer {
-  background: linear-gradient(180deg, rgba(var(--v-theme-surface), 1) 0%, rgba(var(--v-theme-surface), 0.97) 100%) !important;
-  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06);
+  background: var(--surface) !important;
+  border-right: 1px solid var(--border) !important;
   /* Avoid transitioning `transform` — Vuetify owns the slide-in animation
      for the temporary (mobile) drawer; a custom transition breaks it. */
   transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .sidebar-header {
-  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 64px;
+  padding: var(--space-3) var(--space-4);
+}
+.sidebar-header--rail {
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  text-decoration: none;
+}
+
+/* Марка набрана шрифтом: плашка «DS» + слово «ПЛАТФОРМА». */
+.sidebar-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-md);
+  background: var(--brand);
+  color: var(--on-brand);
+  font: 800 14px/1 var(--font-sans);
+  letter-spacing: -0.01em;
+}
+.sidebar-logo { max-height: 28px; max-width: 120px; }
+
+.sidebar-brand-text { min-width: 0; display: flex; flex-direction: column; }
+.sidebar-brand-name {
+  font: 600 11px/14px var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-brand-sub {
+  font: 400 12px/16px var(--font-sans);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar {
   backdrop-filter: blur(12px);
-  background: rgba(var(--v-theme-surface), 0.85) !important;
+  background: color-mix(in srgb, var(--surface) 85%, transparent) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+/* Поле поиска в шапке: выглядит полем, ведёт себя как кнопка. */
+.topbar-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 220px;
+  max-width: 340px;
+  margin-inline-start: var(--space-2);
+  padding: 8px var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--ink-muted);
+  cursor: text;
+}
+.topbar-search:hover { background: var(--surface); }
+.topbar-search:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.topbar-search-ph {
+  flex: 1 1 auto;
+  font: 400 13px/18px var(--font-sans);
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* На мобильном поле растягивается на всю шапку, подпись прячем. */
+@media (max-width: 860px) {
+  .topbar-search { min-width: 0; max-width: none; flex: 1 1 auto; }
 }
 
 /* Topbar status-chip — фон полупрозрачный, чтобы blur topbar'а
@@ -1799,49 +1788,50 @@ watch(
   flex-direction: column;
 }
 
-/* DS nav items: rounded-md, mint-soft active state с primary-цветом
-   текста и иконки. См. desing/ds-primitives.jsx .ds-nav-item. */
+/* Пункт меню: 36px, radius-sm, подпись стилем label
+   (per design/components/Sidebar.md). */
 .menu-item {
-  transition: background-color var(--ds-dur-fast, 120ms) ease,
-              color var(--ds-dur-fast, 120ms) ease;
-  border-radius: var(--ds-radius-md, 8px) !important;
-  margin: 2px 8px !important;
-  font-weight: 500;
+  transition: background-color 120ms ease, color 120ms ease;
+  border-radius: var(--radius-sm) !important;
+  margin: 2px var(--space-2) !important;
+  min-height: 36px !important;
+  color: var(--ink);
 }
 
 .menu-item:hover {
-  background-color: var(--ds-overlay, rgba(var(--v-theme-on-surface), 0.04));
+  background-color: var(--surface-2);
 }
 
-/* Active item — macOS-style: subtle mint fill + читаемый on-surface
-   текст. Без зелёного шрифта (низкий контраст на mint fone).
+.main-nav-list :deep(.menu-item .v-list-item-title) {
+  font: 500 13px/18px var(--font-sans);
+}
+.main-nav-list :deep(.menu-item .v-icon) {
+  color: var(--ink-muted);
+}
+
+/* Активный пункт — brand на brand-soft. Контраст пары проверен дизайном
+   (≥4.5:1 в обеих темах), поэтому зелёный текст здесь допустим.
    !important обязателен: Vuetify вешает цвет из prop `color` ИНЛАЙНОМ на
-   корень активного item — без !important мятный brand побеждал и текст
-   сливался с подложкой в светлой теме. */
+   корень активного item и без него побеждает своя палитра. */
 .main-nav-list :deep(.v-list-item--active) {
-  background: rgba(var(--v-theme-primary), 0.1);
-  color: rgb(var(--v-theme-on-surface)) !important;
-  font-weight: 600;
+  background: var(--brand-soft);
+  color: var(--brand) !important;
 }
-.main-nav-list :deep(.v-list-item--active .v-icon) {
-  color: rgb(var(--v-theme-primary)) !important;
-}
+.main-nav-list :deep(.v-list-item--active .v-icon),
 .main-nav-list :deep(.v-list-item--active .v-list-item-title) {
-  color: rgb(var(--v-theme-on-surface)) !important;
+  color: var(--brand) !important;
   font-weight: 600 !important;
 }
 
-/* Section headers: тонкие подписи UPPERCASE по DS spec
-   (см. desing/ds-primitives.jsx .ds-nav-section). */
+/* Заголовок группы — стиль overline. */
 .main-nav-list :deep(.v-list-subheader.menu-group-header) {
   min-height: 28px !important;
   padding-top: 14px !important;
   padding-bottom: 4px !important;
-  font-size: 11px !important;
-  font-weight: 600 !important;
-  letter-spacing: 1.2px;
+  font: 600 11px/14px var(--font-sans) !important;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ds-on-surface-muted, rgba(var(--v-theme-on-surface), 0.55));
+  color: var(--ink-muted);
   opacity: 1;
 }
 

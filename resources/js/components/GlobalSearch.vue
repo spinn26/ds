@@ -1,152 +1,257 @@
 <template>
-  <v-dialog v-model="open" max-width="640" scrollable transition="dialog-top-transition">
-    <v-card class="global-search">
-      <v-card-text class="pa-0">
-        <div class="d-flex align-center pa-3">
-          <v-icon size="22" color="primary">mdi-magnify</v-icon>
-          <input ref="inputRef" v-model="query" autofocus class="search-input ml-2 flex-grow-1"
-            placeholder="Найти партнёра, клиента, контракт, тикет, продукт..."
-            @keydown.enter="goActive"
-            @keydown.down.prevent="move(1)"
-            @keydown.up.prevent="move(-1)"
-            @keydown.esc="open = false" />
-          <v-chip size="x-small" variant="outlined" color="grey">esc</v-chip>
-        </div>
-        <v-divider />
-        <div v-if="loading" class="d-flex justify-center pa-6">
-          <v-progress-circular indeterminate size="24" />
-        </div>
-        <div v-else-if="!query || query.length < 2" class="text-center text-medium-emphasis pa-6">
-          <v-icon size="40" color="grey-lighten-1">mdi-keyboard</v-icon>
-          <div class="mt-2 text-body-2">Введите минимум 2 символа</div>
-          <div class="text-caption mt-1">Партнёры · Клиенты · Контракты · Тикеты · Продукты</div>
-        </div>
-        <div v-else-if="!results.length" class="text-center text-medium-emphasis pa-6">
-          <v-icon size="40" color="grey-lighten-1">mdi-magnify-close</v-icon>
-          <div class="mt-2 text-body-2">Ничего не найдено</div>
-        </div>
-        <v-list v-else density="comfortable" class="search-results">
-          <v-list-item v-for="(r, idx) in results" :key="`${r.type}-${idx}`"
-            :class="['search-row', { active: idx === activeIdx }]"
-            @click="go(r)"
-            @mouseenter="activeIdx = idx">
-            <template #prepend><v-icon :color="typeColor(r.type)" size="20">{{ r.icon }}</v-icon></template>
-            <div>
-              <div class="font-weight-medium">{{ r.title }}</div>
-              <div v-if="r.subtitle" class="text-caption text-medium-emphasis">{{ r.subtitle }}</div>
-            </div>
-            <template #append>
-              <v-chip size="x-small" variant="tonal" :color="typeColor(r.type)">{{ typeLabel(r.type) }}</v-chip>
-            </template>
-          </v-list-item>
-        </v-list>
-        <v-divider />
-        <div class="d-flex justify-space-between align-center pa-2 text-caption text-medium-emphasis">
-          <div>
-            <v-chip size="x-small" variant="outlined">↑↓</v-chip>
-            <v-chip size="x-small" variant="outlined" class="ms-1">Enter</v-chip>
-            <span class="ms-2">— навигация</span>
-          </div>
-          <div>
-            <v-chip size="x-small" variant="outlined">Ctrl</v-chip>
-            <v-chip size="x-small" variant="outlined" class="ms-1">K</v-chip>
-            <span class="ms-2">— открыть</span>
-          </div>
-        </div>
-      </v-card-text>
-    </v-card>
+  <v-dialog v-model="open" max-width="580" scrollable transition="dialog-top-transition"
+    content-class="palette-dialog">
+    <div class="palette">
+      <div class="palette-field">
+        <v-icon size="20">mdi-magnify</v-icon>
+        <input ref="inputRef" v-model="query" autofocus class="palette-input"
+          :placeholder="placeholder"
+          @keydown.enter="goActive"
+          @keydown.down.prevent="move(1)"
+          @keydown.up.prevent="move(-1)"
+          @keydown.esc="open = false" />
+        <span class="palette-kbd">esc</span>
+      </div>
+
+      <div v-if="loading && !rows.length" class="palette-empty">
+        <v-progress-circular indeterminate size="22" />
+      </div>
+      <div v-else-if="!rows.length" class="palette-empty">
+        <span>{{ query ? 'Ничего не найдено' : 'Разделы не найдены' }}</span>
+      </div>
+      <div v-else ref="listRef" class="palette-list" role="listbox">
+        <button v-for="(r, idx) in rows" :key="`${r.type}-${r.url}-${idx}`" type="button"
+          role="option" :aria-selected="idx === activeIdx"
+          :class="['palette-row', { active: idx === activeIdx }]"
+          @click="go(r)" @mouseenter="activeIdx = idx">
+          <v-icon size="18" class="palette-row-ic">{{ r.icon || 'mdi-chevron-right' }}</v-icon>
+          <span class="palette-row-title">{{ r.title }}</span>
+          <span class="palette-row-group">{{ r.subtitle || typeLabel(r.type) }}</span>
+        </button>
+      </div>
+
+      <div class="palette-foot">
+        <span><span class="palette-kbd">↑↓</span> выбрать</span>
+        <span><span class="palette-kbd">Enter</span> открыть</span>
+        <span><span class="palette-kbd">Ctrl K</span> вызвать</span>
+      </div>
+    </div>
   </v-dialog>
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api';
+
+// Палитра перехода по разделам (per ds-redesign/design/components/CommandPalette.md).
+// Разделы приходят из того же меню, что рисует сайдбар, — поэтому поиск по
+// меню переехал сюда из сайдбара и работает у всех, а не только у сотрудников.
+// Поиск по ДАННЫМ (партнёры, клиенты, договоры) остаётся привилегией staff:
+// эндпоинт /search отдаёт партнёру только его договоры и продукты.
+const props = defineProps({
+  sections: { type: Array, default: () => [] },
+  dataSearch: { type: Boolean, default: false },
+});
 
 const router = useRouter();
 const open = ref(false);
 const query = ref('');
-const results = ref([]);
+const apiResults = ref([]);
 const loading = ref(false);
 const activeIdx = ref(0);
 const inputRef = ref(null);
+const listRef = ref(null);
 let debounceTimer;
+
+const placeholder = computed(() => props.dataSearch
+  ? 'Раздел, партнёр, клиент, договор…'
+  : 'Поиск по разделам');
+
+// Разделы фильтруем на месте: они уже в памяти, ходить на сервер незачем.
+const sectionRows = computed(() => {
+  const q = query.value.trim().toLowerCase();
+  const list = props.sections.filter((s) => !q || s.title.toLowerCase().includes(q));
+  return q ? list.slice(0, 12) : list;
+});
+
+const rows = computed(() => [...sectionRows.value, ...apiResults.value]);
 
 watch(query, () => {
   activeIdx.value = 0;
   clearTimeout(debounceTimer);
-  if (query.value.length < 2) {
-    results.value = [];
+  if (!props.dataSearch || query.value.trim().length < 2) {
+    apiResults.value = [];
     return;
   }
   debounceTimer = setTimeout(search, 250);
 });
 
+watch(open, (v) => {
+  if (v) {
+    query.value = '';
+    apiResults.value = [];
+    activeIdx.value = 0;
+    nextTick(() => inputRef.value?.focus());
+  }
+});
+
+// Порядковый номер запроса: ответы приходят не в том порядке, в каком ушли,
+// и старый затирал бы свежий.
+let seq = 0;
+
 async function search() {
+  const my = ++seq;
+  const term = query.value.trim();
   loading.value = true;
   try {
-    const { data } = await api.get('/search', { params: { q: query.value } });
-    results.value = data.results || [];
+    // У сотрудника — тот же /admin/search, что был в прежней панели: он режет
+    // разделы по правам и ищет шире (партнёры, клиенты, договоры, обращения).
+    // Партнёру этот эндпоинт отдаёт пустоту, для него — кабинетный /search.
+    if (props.dataSearch) {
+      const { data } = await api.get('/admin/search', { params: { q: term } });
+      if (my !== seq) return;
+      apiResults.value = (data.groups || []).flatMap((g) => (g.items || []).map((it) => ({
+        type: 'data',
+        icon: g.icon,
+        title: it.title,
+        subtitle: g.title,
+        url: it.path,
+      })));
+    } else {
+      const { data } = await api.get('/search', { params: { q: term } });
+      if (my !== seq) return;
+      apiResults.value = (data.results || []).map((r) => ({ ...r, subtitle: typeLabel(r.type) }));
+    }
   } catch {
-    results.value = [];
+    if (my === seq) apiResults.value = [];
   }
-  loading.value = false;
+  if (my === seq) loading.value = false;
 }
 
 function move(delta) {
-  if (!results.value.length) return;
-  activeIdx.value = (activeIdx.value + delta + results.value.length) % results.value.length;
+  if (!rows.value.length) return;
+  activeIdx.value = (activeIdx.value + delta + rows.value.length) % rows.value.length;
+  nextTick(() => {
+    listRef.value?.querySelector('.palette-row.active')?.scrollIntoView({ block: 'nearest' });
+  });
 }
 function goActive() {
-  if (results.value[activeIdx.value]) go(results.value[activeIdx.value]);
+  if (rows.value[activeIdx.value]) go(rows.value[activeIdx.value]);
 }
 function go(r) {
   open.value = false;
-  router.push(r.url);
+  if (!r.url) return;
+  // Внешние пункты меню (ФинРывок, Telegram-поддержка) — обычные ссылки.
+  if (/^https?:\/\//.test(r.url)) window.open(r.url, '_blank', 'noopener');
+  else router.push(r.url);
 }
 function typeLabel(t) {
-  return { partner: 'Партнёр', client: 'Клиент', contract: 'Контракт',
-    ticket: 'Тикет', product: 'Продукт' }[t] || t;
-}
-function typeColor(t) {
-  return { partner: 'primary', client: 'info', contract: 'success',
-    ticket: 'warning', product: 'secondary' }[t] || 'grey';
+  return { section: 'Раздел', partner: 'Партнёр', client: 'Клиент', contract: 'Договор',
+    ticket: 'Обращение', product: 'Продукт' }[t] || t;
 }
 
 function handleKeyDown(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
     open.value = true;
-    nextTick(() => inputRef.value?.focus());
   }
 }
 onMounted(() => window.addEventListener('keydown', handleKeyDown));
-onUnmounted(() => window.removeEventListener('keydown', handleKeyDown));
+onUnmounted(() => { window.removeEventListener('keydown', handleKeyDown); clearTimeout(debounceTimer); });
 
 defineExpose({ open: () => { open.value = true; } });
 </script>
 
 <style scoped>
-.global-search {
-  border-radius: 12px;
+.palette {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  font-family: var(--font-sans);
+  color: var(--ink);
 }
-.search-input {
+
+.palette-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  color: var(--ink-muted);
+}
+
+.palette-input {
+  flex: 1 1 auto;
   background: transparent;
-  border: none;
+  border: 0;
   outline: none;
-  color: inherit;
-  font-size: 16px;
-  width: 100%;
+  font: 400 16px/24px var(--font-sans);
+  color: var(--ink);
 }
-.search-row {
-  cursor: pointer;
-  transition: background 0.1s;
+.palette-input::placeholder { color: var(--ink-muted); }
+
+.palette-kbd {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  font: 400 11px/16px var(--font-sans);
+  color: var(--ink-muted);
+  white-space: nowrap;
 }
-.search-row.active {
-  background: rgba(var(--v-theme-primary), 0.12);
-}
-.search-results {
-  max-height: 50vh;
+
+.palette-list {
+  max-height: 52vh;
   overflow-y: auto;
+  padding: var(--space-2);
 }
+
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 9px var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: 500 13px/18px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+.palette-row.active {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.palette-row.active .palette-row-ic { color: var(--brand); }
+
+.palette-row-ic { color: var(--ink-muted); flex: 0 0 auto; }
+.palette-row-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-row-group {
+  flex: 0 0 auto;
+  font: 400 12px/16px var(--font-sans);
+  color: var(--ink-muted);
+}
+
+.palette-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+  color: var(--ink-muted);
+  font: 400 14px/22px var(--font-sans);
+}
+
+.palette-foot {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border);
+  font: 400 12px/16px var(--font-sans);
+  color: var(--ink-muted);
+}
+.palette-foot span { display: inline-flex; align-items: center; gap: 6px; }
 </style>
