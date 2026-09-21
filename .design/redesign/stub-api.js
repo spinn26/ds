@@ -154,6 +154,7 @@ const ARTICLE = {
 const STATUS_INFO = {
   activityName: 'Активен',
   activityId: 2,
+  qualification: '2 [Про]',
   yearPeriodEnd: '2027-07-10',
   daysRemaining: 292,
   canInvite: true,
@@ -269,7 +270,15 @@ const ROUTES = [
   [/^\/news/, () => ({ data: NEWS, total: NEWS.length, unread: 1 })],
   [/^\/auth\/me\/permissions/, () => ({ permissions: {} })],
   [/^\/auth\/me/, () => ME],
-  [/^\/profile/, () => ({ user: ME, statusInfo: STATUS_INFO, consultant: { id: 2, personName: 'Громова Любава Сергеевна', participantCode: 'DS-2' }, referral: { code: 'LUBAVA' } })],
+  // referralCode/canInvite шапка берёт из data.referral, а не из statusInfo —
+  // ключи должны совпадать с ответом ProfileController, иначе кнопки «Реф.
+  // ссылка» на стенде нет, а на проде она есть.
+  [/^\/profile/, () => ({
+    user: ME,
+    statusInfo: STATUS_INFO,
+    consultant: { id: 2, personName: 'Громова Любава Сергеевна', participantCode: 'DS-2' },
+    referral: { referralCode: 'LUBAVA', referralLink: 'https://dev.dsconsult.ru/register?ref=LUBAVA', canInvite: true },
+  })],
   [/^\/announcements\/active/, () => ({ data: [] })],
   [/^\/notifications\/unread-count/, () => ({ count: 27 })],
   [/^\/notifications/, () => ({ data: [

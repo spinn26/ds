@@ -935,9 +935,17 @@ class PartnerStatusService
     {
         $activity = $consultant->activity ?? PartnerActivity::Registered;
 
+        // Квалификация в шапке кабинета («2 · Про» под именем). Раньше её не
+        // было ни в /profile, ни в /auth/me — уровень знал только рабочий
+        // стол, и шапка на остальных страницах показывала пустоту.
+        $statusLevel = $consultant->status_and_lvl
+            ? DB::table('status_levels')->where('id', $consultant->status_and_lvl)->first()
+            : null;
+
         $info = [
             'activityId' => $activity->value,
             'activityName' => $activity->label(),
+            'qualification' => $statusLevel ? "{$statusLevel->level} [{$statusLevel->title}]" : null,
             'hasAccess' => $activity->hasAccess(),
             'canInvite' => $activity->canInvite(),
             'terminationCount' => $consultant->terminationCount ?? 0,
