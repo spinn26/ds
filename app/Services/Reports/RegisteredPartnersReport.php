@@ -54,7 +54,9 @@ class RegisteredPartnersReport extends AbstractReportType
 
         $partners = DB::table('consultant')
             ->whereNull('dateDeleted')
-            ->whereBetween('dateCreated', [$dateFrom.' 00:00:00', $dateTo.' 23:59:59'])
+            // Время не дописываем: ReportGenerator уже прогоняет верхнюю
+            // границу через endOfDay(), и второе «23:59:59» ломало запрос.
+            ->whereBetween('dateCreated', [$dateFrom, $dateTo])
             ->orderBy('dateCreated')
             ->get([
                 'id', 'personName', 'participantCode', 'dateCreated', 'inviterName',
