@@ -69,6 +69,12 @@ Route::post('/auth/activate', [AuthController::class, 'activate']);
 
 Route::get('/workspace', [\App\Http\Controllers\Api\WorkspaceController::class, 'index']);
 
+// Новости кабинета. Статический сегмент раньше параметрического — иначе
+// /news/{id} перехватит и «/news».
+Route::get('/news', [\App\Http\Controllers\Api\NewsController::class, 'index']);
+Route::get('/news/{id}', [\App\Http\Controllers\Api\NewsController::class, 'show'])->whereNumber('id');
+Route::post('/news/{id}/read', [\App\Http\Controllers\Api\NewsController::class, 'markRead'])->whereNumber('id');
+
 // Личный виджет Workspace: заметка-scratchpad. TODO-список (/my-tasks)
 // удалён вместе с модулем «Задачи» (2026-08-14).
 Route::get('/my-note', [\App\Http\Controllers\Api\UserDashboardController::class, 'getNote']);

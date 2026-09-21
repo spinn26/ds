@@ -19,6 +19,8 @@ import '../../resources/js/styles/global.css';
 import { createAppVuetify } from '../../resources/js/plugins/vuetify';
 import MainLayout from '../../resources/js/layouts/MainLayout.vue';
 import Workspace from '../../resources/js/pages/Workspace.vue';
+import NewsDetail from '../../resources/js/pages/News/NewsDetail.vue';
+import NewsList from '../../resources/js/pages/News/NewsList.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 
 const params = new URLSearchParams(location.search);
@@ -39,6 +41,8 @@ const router = createRouter({
       component: MainLayout,
       children: [
         { path: '', component: Workspace },
+        { path: 'news', component: NewsList },
+        { path: 'news/:id', component: NewsDetail },
         // Заглушки для ссылок каркаса: без них router-link ругается.
         { path: ':pathMatch(.*)*', component: blank },
       ],

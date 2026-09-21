@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Consultant;
+use App\Services\NewsService;
+use App\Services\PartnerPromoProgress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -11,6 +13,11 @@ use Illuminate\Support\Facades\Schema;
 
 class WorkspaceController extends Controller
 {
+    public function __construct(
+        private readonly NewsService $news,
+        private readonly PartnerPromoProgress $promoProgress,
+    ) {}
+
     /**
      * Рабочий стол — агрегированные данные для всех ролей.
      */
@@ -30,8 +37,11 @@ class WorkspaceController extends Controller
 
         $consultant = Consultant::forUser($user->id);
 
+        $feed = $this->news->feed($user->id, null, 10);
+
         $data = [
-            'news' => $this->getNews(),
+            'news' => $feed['items'],
+            'newsUnread' => $feed['unread'],
             'recentMessages' => $this->getRecentMessages($consultant?->id),
             'unreadCount' => $this->getUnreadCount($consultant?->id),
             'upcomingEvents' => $this->getUpcomingEvents(),
@@ -40,6 +50,9 @@ class WorkspaceController extends Controller
         // Партнёрские данные
         if ($isConsultant && $consultant) {
             $data['partnerStats'] = $this->getPartnerStats($consultant);
+            // Панель акции в hero. Нет действующей акции — ключа нет, и hero
+            // остаётся одним приветствием во всю ширину.
+            $data['promo'] = $this->news->activePromo($this->promoProgress->forConsultant($consultant));
             $data['teamActivity'] = $this->getTeamActivity($consultant);
             // Консультант сам является Лидером сети, если у него нет пригласителя
             $data['isNetworkLeader'] = empty($consultant->inviter);
@@ -55,25 +68,8 @@ class WorkspaceController extends Controller
         return response()->json($data);
     }
 
-    /** Новости (последние 10) */
-    private function getNews(): array
-    {
-        $this->ensureNewsTable();
-
-        return DB::table('news')
-            ->where('active', true)
-            ->orderByDesc('created_at')
-            ->limit(10)
-            ->get()
-            ->map(fn ($n) => [
-                'id' => $n->id,
-                'title' => $n->title,
-                'content' => $n->content,
-                'type' => $n->type, // info, warning, success
-                'createdAt' => $n->created_at,
-            ])
-            ->toArray();
-    }
+    // Ленту новостей собирает NewsService: та же выдача идёт и в /news, и
+    // в страницу новости, второй копии запроса здесь быть не должно.
 
     /** Последние 5 сообщений */
     private function getRecentMessages(?int $consultantId): array
@@ -180,11 +176,29 @@ class WorkspaceController extends Controller
             ->value('groupVolumeCumulative')
             ?? $consultant->groupVolumeCumulative ?? 0;
 
+        // Прогресс до следующей квалификации. Формула та же, что на «Дашборде»
+        // (НГП / порог следующего уровня): считать её на фронте по-своему —
+        // значит разойтись в процентах между двумя страницами.
+        $nextLevel = $nominalLevel
+            ? DB::table('status_levels')->where('level', $nominalLevel->level + 1)->first()
+            : null;
+        $nextThreshold = (float) ($nextLevel->groupVolumeCumulative ?? 0);
+        $qualificationProgress = $nextThreshold > 0
+            ? round(min(100, (float) $cumulative / $nextThreshold * 100), 1)
+            : null;
+
         return [
             'personalVolume' => round((float) ($qLog->personalVolume ?? $consultant->personalVolume ?? 0), 2),
             'groupVolume' => round((float) ($qLog->groupVolume ?? $consultant->groupVolume ?? 0), 2),
             'groupVolumeCumulative' => round((float) $cumulative, 2),
             'qualification' => $nominalLevel ? "{$nominalLevel->level} [{$nominalLevel->title}]" : '—',
+            // Уровень и название отдельно: полоса показателей рисует «2» крупно
+            // и «Про» рядом мелким, разбирать строку на фронте незачем.
+            'qualificationLevel' => $nominalLevel->level ?? null,
+            'qualificationTitle' => $nominalLevel->title ?? null,
+            'nextLevelTitle' => $nextLevel->title ?? null,
+            'qualificationProgress' => $qualificationProgress,
+            'ngpToNext' => $nextThreshold > 0 ? round(max(0, $nextThreshold - (float) $cumulative), 2) : null,
             'percent' => $calcLevel ? $calcLevel->percent : 0,
             'calcQualification' => $levelsDontMatch ? "{$calcLevel->level} [{$calcLevel->title}]" : null,
             'calcPercent' => $calcLevel ? $calcLevel->percent : 0,
@@ -557,10 +571,7 @@ class WorkspaceController extends Controller
         $this->ensureNewsTable();
 
         $active = $request->boolean('active', true);
-        $id = DB::table('news')->insertGetId([
-            'title' => $request->input('title'),
-            'content' => $request->input('content'),
-            'type' => $request->input('type', 'info'),
+        $id = DB::table('news')->insertGetId($this->newsPayload($request) + [
             'active' => $active,
             'created_by' => $request->user()->id,
             'created_at' => now(),
@@ -591,15 +602,46 @@ class WorkspaceController extends Controller
 
     public function updateNews(Request $request, int $id): JsonResponse
     {
-        DB::table('news')->where('id', $id)->update([
-            'title' => $request->input('title'),
-            'content' => $request->input('content'),
-            'type' => $request->input('type', 'info'),
+        DB::table('news')->where('id', $id)->update($this->newsPayload($request) + [
             'active' => $request->boolean('active'),
             'updated_at' => now(),
         ]);
 
         return response()->json(['message' => 'Новость обновлена']);
+    }
+
+    /**
+     * Поля новости, общие для создания и правки.
+     *
+     * Тег, анонс, обложка и параметры акции живут в самой новости (миграция
+     * 2026_09_21_000100): лента кабинета рисует по ним карточку, а страница
+     * новости — блок «Ваш прогресс». Старое поле `type` не трогаем: оно
+     * красит плашку в админке и в прежнем виджете.
+     *
+     * @return array<string, mixed>
+     */
+    private function newsPayload(Request $request): array
+    {
+        $validated = $request->validate([
+            'kind' => 'nullable|in:promo,update',
+            'excerpt' => 'nullable|string|max:500',
+            'cover_url' => 'nullable|string|max:512',
+            'published_at' => 'nullable|date',
+            'meta' => 'nullable|array',
+        ]);
+
+        return [
+            'title' => $request->input('title'),
+            'content' => $request->input('content'),
+            'type' => $request->input('type', 'info'),
+            'kind' => $validated['kind'] ?? 'update',
+            'excerpt' => $validated['excerpt'] ?? null,
+            'cover_url' => $validated['cover_url'] ?? null,
+            'pinned' => $request->boolean('pinned'),
+            'published_at' => $validated['published_at'] ?? now(),
+            // jsonb принимает строку: массив PDO не приведёт сам.
+            'meta' => isset($validated['meta']) ? json_encode($validated['meta'], JSON_UNESCAPED_UNICODE) : null,
+        ];
     }
 
     public function deleteNews(int $id): JsonResponse

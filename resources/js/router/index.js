@@ -17,6 +17,11 @@ const routes = [
         children: [
             // Workspace = main page for all roles
             { path: '', component: () => import('../pages/Workspace.vue') },
+            // Новости кабинета: отдельный маршрут, чтобы ссылку на новость
+            // можно было отправить, а «назад» браузера работала.
+            // Статический сегмент раньше параметрического.
+            { path: 'news', component: () => import('../pages/News/NewsList.vue') },
+            { path: 'news/:id', component: () => import('../pages/News/NewsDetail.vue') },
             // Partner pages
             { path: 'dashboard', component: () => import('../pages/Dashboard.vue') },
             { path: 'terminated', component: () => import('../pages/Terminated.vue') },
