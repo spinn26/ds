@@ -86,24 +86,87 @@ class PartnerStatusService
      */
     public function periodPersonalVolume(Consultant $consultant): float
     {
-        $periodStart = $consultant->activity === PartnerActivity::Active && $consultant->yearPeriodEnd
-            ? Carbon::parse($consultant->yearPeriodEnd)->subYear()
-            : ($consultant->dateCreated ?: Carbon::now()->subYears(10));
+        return $this->periodPersonalVolumeFor([$consultant->id])[$consultant->id] ?? 0.0;
+    }
 
-        $lp = (float) DB::table('transaction as t')
-            ->join('contract as c', 'c.id', '=', 't.contract')
-            ->where('c.consultant', $consultant->id)
-            ->whereNull('t.deletedAt')
-            ->whereNull('c.deletedAt')
-            ->where('t.date', '>=', $periodStart)
-            ->sum('t.personalVolume');
+    /**
+     * То же самое для списка партнёров — одним запросом.
+     *
+     * Нужен спискам (структура партнёра, «Статусы партнёров» в админке): там
+     * эта же цифра стоит рядом с порогом 500, и считать её по-своему нельзя.
+     * До 22.09.2026 так и было — четыре места считали «ЛП до 500» четырьмя
+     * способами: кто с даты активации за всё время, кто по комиссиям вместо
+     * транзакций, кто без ручных баллов. Партнёр видел в структуре одно
+     * число, в кабинете другое, а терминировали по третьему.
+     *
+     * @param  list<int>  $consultantIds
+     * @return array<int, float>  id => ЛП периода
+     */
+    public function periodPersonalVolumeFor(array $consultantIds): array
+    {
+        $consultantIds = array_values(array_unique(array_filter(array_map('intval', $consultantIds))));
+        if ($consultantIds === []) {
+            return [];
+        }
 
-        $lp += (float) DB::table('other_accruals')
-            ->where('consultant', $consultant->id)
-            ->where('accrual_date', '>=', Carbon::parse($periodStart)->startOfDay())
-            ->sum('points');
+        $rows = DB::table('consultant')
+            ->whereIn('id', $consultantIds)
+            ->get(['id', 'activity', 'yearPeriodEnd', 'dateCreated']);
 
-        return $lp;
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        // Начало периода у каждого своё, поэтому отдаём его в запрос списком
+        // VALUES и фильтруем на стороне БД, а не тянем все транзакции в PHP.
+        $values = [];
+        $bindings = [];
+        foreach ($rows as $c) {
+            $values[] = '(?::int, ?::timestamp)';
+            $bindings[] = (int) $c->id;
+            $bindings[] = $this->periodStartFor($c)->toDateTimeString();
+        }
+
+        $sql = 'WITH win(id, start_at) AS (VALUES ' . implode(', ', $values) . ')
+            SELECT w.id,
+                   COALESCE((SELECT SUM(t."personalVolume")
+                               FROM transaction t
+                               JOIN contract ct ON ct.id = t.contract
+                              WHERE ct.consultant = w.id
+                                AND t."deletedAt" IS NULL
+                                AND ct."deletedAt" IS NULL
+                                AND t.date >= w.start_at), 0)
+                 + COALESCE((SELECT SUM(oa.points)
+                               FROM other_accruals oa
+                              WHERE oa.consultant = w.id
+                                AND oa.accrual_date >= w.start_at::date), 0) AS lp
+              FROM win w';
+
+        $result = [];
+        foreach (DB::select($sql, $bindings) as $r) {
+            $result[(int) $r->id] = (float) $r->lp;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Начало текущего периода: у «Активен» — годовой цикл (конец минус год),
+     * у остальных — дата регистрации (окно активации). Принимает и модель,
+     * и сырую строку выборки: в списках партнёры приходят из DB::table.
+     */
+    private function periodStartFor(object $consultant): Carbon
+    {
+        $activity = $consultant->activity ?? null;
+        $activityValue = $activity instanceof PartnerActivity ? $activity->value : (int) $activity;
+
+        if ($activityValue === PartnerActivity::Active->value && ! empty($consultant->yearPeriodEnd)) {
+            return Carbon::parse($consultant->yearPeriodEnd)->subYear();
+        }
+
+        return ! empty($consultant->dateCreated)
+            ? Carbon::parse($consultant->dateCreated)
+            : Carbon::now()->subYears(10);
     }
 
     /**

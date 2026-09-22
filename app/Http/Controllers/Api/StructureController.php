@@ -453,7 +453,7 @@ class StructureController extends Controller
             ['Статус активности', 'text', fn ($m) => $m['activityName'] ?? null],
             ['Уровень в структуре', 'number', fn ($m) => $m['level'] ?? null],
             ['ЛП', 'number', fn ($m) => $m['personalVolume'] ?? 0],
-            ['ЛП с активации', 'number', fn ($m) => $m['personalVolumeSinceActivation'] ?? 0],
+            ['ЛП за период', 'number', fn ($m) => $m['personalVolumePeriod'] ?? 0],
             ['ГП', 'number', fn ($m) => $m['groupVolume'] ?? 0],
             ['НГП', 'number', fn ($m) => $m['groupVolumeCumulative'] ?? 0],
             ['Клиенты', 'number', fn ($m) => $m['clientCount'] ?? 0],

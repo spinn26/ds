@@ -120,7 +120,7 @@
         <h4 class="p-fsec__title">Объёмы</h4>
         <div class="d-flex flex-wrap ga-4">
           <div style="flex: 1 1 240px">
-            <div class="text-caption text-medium-emphasis mb-1">ЛП — личные продажи</div>
+            <div class="text-caption text-medium-emphasis mb-1">ЛП — личные продажи за текущий период партнёра</div>
             <div class="d-flex ga-2">
               <v-text-field v-model="draft.lpMin" type="number" placeholder="от"
                 variant="outlined" density="compact" hide-details clearable />
@@ -341,7 +341,7 @@
               icon="mdi-filter-outline" title="Показать всех, кого он пригласил" />
           </div>
           <div class="p-card__row">
-            <span class="p-card__k">Личный объём</span>
+            <span class="p-card__k">ЛП за период</span>
             <span class="p-card__v">{{ fmtNum(cardItem.personalVolume) }}</span>
           </div>
           <div class="p-card__row">

@@ -64,6 +64,13 @@
     </v-card>
 
     <v-card :loading="loading" class="ds-card" elevation="0">
+      <!-- Периоды у колонок разные, и по названиям это не видно: ЛП и ГП —
+           месяц последнего закрытого снимка, НГП — всё время, «ЛП за период» —
+           текущий годовой цикл партнёра, по нему и считается порог 500. -->
+      <div class="pa-3 pb-0 text-caption text-medium-emphasis">
+        ЛП и ГП — за последний закрытый месяц · НГП — накоплено за всё время ·
+        «ЛП за период» — с начала годового цикла партнёра, это его путь к порогу 500
+      </div>
       <div style="overflow-x: auto">
       <v-table density="compact" hover>
         <thead>
@@ -132,9 +139,9 @@
               </td>
               <td style="white-space:nowrap">
                 <div>{{ statusChangeDate(row) || '—' }}</div>
-                <div v-if="isActive(row) && row.personalVolumeSinceActivation != null"
-                  class="text-caption" :class="row.personalVolumeSinceActivation < 500 ? 'text-warning' : 'text-success'">
-                  ЛП с активации: {{ fmt(row.personalVolumeSinceActivation) }} / 500
+                <div v-if="isActive(row) && row.personalVolumePeriod != null"
+                  class="text-caption" :class="row.personalVolumePeriod < 500 ? 'text-warning' : 'text-success'">
+                  ЛП за период: {{ fmt(row.personalVolumePeriod) }} / 500
                 </div>
               </td>
               <td class="text-right" style="white-space:nowrap">{{ fmt(row.personalVolume) }}</td>
@@ -310,14 +317,14 @@
             <v-icon size="18" color="medium-emphasis">mdi-account-arrow-up-outline</v-icon>
             <span class="text-body-2">Пригласитель: {{ selectedPartner.inviterName }}</span>
           </div>
-          <div v-if="selectedPartner.personalVolumeSinceActivation != null && isActive(selectedPartner)"
+          <div v-if="selectedPartner.personalVolumePeriod != null && isActive(selectedPartner)"
             class="d-flex align-center ga-2">
-            <v-icon size="18" :color="selectedPartner.personalVolumeSinceActivation < 500 ? 'warning' : 'success'">
+            <v-icon size="18" :color="selectedPartner.personalVolumePeriod < 500 ? 'warning' : 'success'">
               mdi-trending-up
             </v-icon>
             <span class="text-body-2"
-              :class="selectedPartner.personalVolumeSinceActivation < 500 ? 'text-warning' : 'text-success'">
-              ЛП с активации: {{ fmt(selectedPartner.personalVolumeSinceActivation) }} / 500
+              :class="selectedPartner.personalVolumePeriod < 500 ? 'text-warning' : 'text-success'">
+              ЛП за период: {{ fmt(selectedPartner.personalVolumePeriod) }} / 500
             </span>
           </div>
         </div>

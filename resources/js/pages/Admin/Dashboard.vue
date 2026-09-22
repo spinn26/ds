@@ -155,7 +155,7 @@
           <div class="text-subtitle-1 font-weight-bold mb-3">ТОП-10 партнёров по НГП</div>
           <v-table density="compact">
             <thead>
-              <tr><th>#</th><th>Партнёр</th><th class="text-right">НГП</th><th class="text-right">ЛП</th></tr>
+              <tr><th>#</th><th>Партнёр</th><th class="text-right">НГП</th><th class="text-right">ЛП за период</th></tr>
             </thead>
             <tbody>
               <tr v-for="(c, i) in data.charts?.topConsultants || []" :key="i">

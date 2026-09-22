@@ -54,6 +54,32 @@ class StructureMembersTest extends TestCase
         $this->assertEqualsWithDelta(700, $row['groupVolume'], 0.01);
     }
 
+    /**
+     * ⚠ «ЛП за период» — путь партнёра к порогу 500, а порог действует за
+     * годовой цикл и каждый год обнуляется. Сделки прошлого цикла в него не
+     * входят.
+     *
+     * Раньше здесь суммировались личные комиссии с даты активации за ВСЁ
+     * время: у партнёра на третьем году выходило 1400 из 500, и наставник
+     * видел запас там, где партнёр был близок к расторжению договора.
+     */
+    #[Test]
+    public function the_period_volume_counts_only_the_current_cycle(): void
+    {
+        DB::table('consultant')->where('id', self::CHILD)->update([
+            'dateActivity' => '2026-06-01 00:00:00',
+            'yearPeriodEnd' => '2027-06-01 00:00:00',
+        ]);
+        $this->ownDeal(self::CHILD, '2025-11-27 12:00:00', 400);  // прошлый цикл
+        $this->ownDeal(self::CHILD, '2026-06-17 12:00:00', 120);  // текущий
+        $this->ownDeal(self::CHILD, '2026-07-16 12:00:00', 30);   // текущий
+
+        $row = $this->member(self::CHILD);
+
+        $this->assertEqualsWithDelta(150, $row['personalVolumePeriod'], 0.01,
+            'сделки прошлого годового цикла в счёт не идут');
+    }
+
     /** Без записей журнала показатели падают на колонки карточки. */
     #[Test]
     public function the_card_columns_are_the_fallback(): void
@@ -208,6 +234,34 @@ class StructureMembersTest extends TestCase
         $this->assertArrayHasKey($id, $byId->all(), 'партнёр есть в структуре');
 
         return $byId[$id];
+    }
+
+    /** Собственная сделка партнёра: контракт на него + транзакция с баллами. */
+    private function ownDeal(int $consultant, string $date, float $points): void
+    {
+        $contract = $this->seq++;
+
+        DB::table('contract')->insert([
+            'id' => $contract,
+            'consultant' => $consultant,
+            'number' => 'ST-' . $contract,
+            'status' => 1,
+            'ammount' => 1_000,
+            'createDate' => $date,
+        ]);
+
+        DB::table('transaction')->insert([
+            'id' => $this->seq++,
+            'contract' => $contract,
+            'date' => $date,
+            'dateMonth' => substr($date, 0, 7),
+            'dateYear' => (int) substr($date, 0, 4),
+            'amountRUB' => 1_000,
+            'commissionsAmountRUB' => 0,
+            'netRevenueRUB' => 0,
+            'profitRUB' => 0,
+            'personalVolume' => $points,
+        ]);
     }
 
     /** @param array<string, mixed> $attrs */

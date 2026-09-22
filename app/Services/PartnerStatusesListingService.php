@@ -182,42 +182,28 @@ class PartnerStatusesListingService
 
     /**
      * Per spec ✅Статусы партнеров §2 col.7: «Сумма ЛП от даты активации
-     * (каждый год обнуляется)». Считаем ЛП за текущий годовой цикл, отсчитывая
-     * от dateActivity. Один batch-SUM по commission, чтобы не плодить N+1 на
-     * 1k+ строках.
+     * (каждый год обнуляется)».
      *
-     * @param Collection<int, mixed> $consultantIds
+     * ⚠ Считает PartnerStatusService::periodPersonalVolumeFor() — та же
+     * формула, по которой партнёру рисуется счётчик «Набрано N / 500» в
+     * кабинете и по которой его терминируют. Свой расчёт тут был и расходился
+     * с ней трижды: окно отсчитывалось от dateActivity (а годовой период
+     * двигает yearPeriodEnd), суммировались commission вместо транзакций
+     * (комиссии появляются только после расчёта), и не учитывались ручные
+     * баллы «Прочих начислений», которые по спеке тоже держат статус.
+     *
+     * @param  Collection<int, mixed>  $consultantIds
+     * @return Collection<int, float>
      */
     private function lpFromActivation(Collection $consultantIds): Collection
     {
-        $lp = collect();
         if ($consultantIds->isEmpty()) {
-            return $lp;
+            return collect();
         }
 
-        $rows = DB::select('
-            WITH window_start AS (
-                SELECT
-                    c.id,
-                    c."dateActivity"
-                      + make_interval(years => FLOOR(EXTRACT(YEAR FROM AGE(NOW(), c."dateActivity")))::int)
-                      AS year_start
-                FROM consultant c
-                WHERE c.id = ANY(?::int[]) AND c."dateActivity" IS NOT NULL
-            )
-            SELECT w.id, COALESCE(SUM(cm."personalVolume"), 0) AS lp
-            FROM window_start w
-            LEFT JOIN commission cm
-              ON cm.consultant = w.id
-             AND cm."deletedAt" IS NULL
-             AND cm.date >= w.year_start
-            GROUP BY w.id
-        ', ['{' . $consultantIds->implode(',') . '}']);
-
-        foreach ($rows as $r) {
-            $lp[$r->id] = (float) $r->lp;
-        }
-
-        return $lp;
+        return collect(
+            app(PartnerStatusService::class)
+                ->periodPersonalVolumeFor($consultantIds->map(fn ($v) => (int) $v)->all())
+        );
     }
 }

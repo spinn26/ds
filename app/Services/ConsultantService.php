@@ -99,7 +99,7 @@ class ConsultantService
                 'groupVolumeCumulative' => $hasLeft
                     ? 0.0
                     : round((float) ($cumulativeByConsultant[$c->id] ?? $c->groupVolumeCumulative ?? 0), 2),
-                'personalVolumeSinceActivation' => round((float) ($cumulativeLpByConsultant[$c->id] ?? 0), 2),
+                'personalVolumePeriod' => round((float) ($cumulativeLpByConsultant[$c->id] ?? 0), 2),
                 'clientCount' => $clientCount,
                 'contractCount' => $contractCount,
                 'hasChildren' => $subCount > 0,
@@ -500,34 +500,19 @@ class ConsultantService
             : collect();
 
 
-        // Batch: накопленный ЛП с даты активации (chainOrder=1 = личная комиссия)
-        // Возвращаем одним запросом все комиссии ветки и суммируем в PHP
-        // только после consultant.dateActivity. Так избегаем коррелированного
-        // подзапроса и остаёмся совместимы с любой СУБД.
-        $activationMap = $consultants->pluck('dateActivity', 'id');
-        $cumulativeLpByConsultant = [];
-        $activeIds = $activationMap->filter()->keys()->all();
-        if (! empty($activeIds)) {
-            $rows = DB::table('commission')
-                ->whereIn('consultant', $activeIds)
-                ->where('chainOrder', 1)
-                ->whereNull('deletedAt')
-                ->get(['consultant', 'date', 'personalVolume']);
-
-            foreach ($rows as $r) {
-                $activation = $activationMap[$r->consultant] ?? null;
-                if (! $activation) continue;
-                $commissionDate = $r->date ? \Carbon\Carbon::parse($r->date) : null;
-                if (! $commissionDate) continue;
-                $actDate = $activation instanceof \Carbon\Carbon
-                    ? $activation
-                    : \Carbon\Carbon::parse($activation);
-                if ($commissionDate->lt($actDate)) continue;
-
-                $cumulativeLpByConsultant[$r->consultant] =
-                    ($cumulativeLpByConsultant[$r->consultant] ?? 0) + (float) ($r->personalVolume ?? 0);
-            }
-        }
+        // Batch: ЛП за ТЕКУЩИЙ период — то самое число, что стоит в списке
+        // рядом с порогом 500 («ЛП за период: 320 / 500»).
+        //
+        // ⚠ Раньше здесь суммировались личные комиссии с даты активации за
+        // ВСЁ время. У партнёра на третьем году это давало 1400 из 500 — при
+        // том, что порог действует за год и каждый год обнуляется. Человек,
+        // смотревший структуру, видел безопасный запас там, где партнёр на
+        // самом деле был близок к расторжению договора.
+        //
+        // Формула теперь одна на всю платформу: PartnerStatusService —
+        // тот же расчёт в кабинете партнёра и в проверке терминации.
+        $cumulativeLpByConsultant = app(PartnerStatusService::class)
+            ->periodPersonalVolumeFor($consultants->pluck('id')->filter()->map(fn ($v) => (int) $v)->all());
 
         // Batch load WebUser name parts (firstName/lastName/patronymic)
         // Used as source of truth for name parts per project rules
