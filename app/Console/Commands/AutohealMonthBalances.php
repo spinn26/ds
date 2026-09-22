@@ -91,7 +91,7 @@ class AutohealMonthBalances extends Command
             }
         }
 
-        return array_values($given);
+        return $given;
     }
 
     private function processMonth(string $ym): void
