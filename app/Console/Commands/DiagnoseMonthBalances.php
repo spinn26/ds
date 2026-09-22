@@ -2,11 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Services\BalanceDriftInspector;
 use App\Services\CommissionCalculator;
 use App\Services\TelegramNotifier;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Read-only разбор месяца: почему «Итого начислено» расходится с продажами,
@@ -19,6 +19,11 @@ use Illuminate\Support\Facades\DB;
  *
  *   php artisan finance:diagnose-month 2026-07
  *   php artisan finance:diagnose-month 2026-07 --consultant=256
+ *
+ * ⚠ Это инструмент РАЗБОРА для человека. В расписании стоит не он, а
+ * `finance:autoheal-balances`: тот же запрос (BalanceDriftInspector), но
+ * расхождение он ещё и чинит сам. Здесь же --notify оставлен для ручного
+ * «показать картину в чат», без починки.
  */
 class DiagnoseMonthBalances extends Command
 {
@@ -32,6 +37,7 @@ class DiagnoseMonthBalances extends Command
 
     public function __construct(
         private readonly TelegramNotifier $telegram,
+        private readonly BalanceDriftInspector $inspector,
     ) {
         parent::__construct();
     }
@@ -45,88 +51,29 @@ class DiagnoseMonthBalances extends Command
             return self::FAILURE;
         }
         if (CommissionCalculator::isHistorical($ym)) {
-            $this->warn("Период {$ym} исторический (< " . CommissionCalculator::HISTORICAL_CUTOFF . ') — снимок неизменен по правилам расчёта.');
+            $this->warn("Период {$ym} исторический (< ".CommissionCalculator::HISTORICAL_CUTOFF.') — снимок неизменен по правилам расчёта.');
         }
 
         $only = $this->option('consultant') ? (int) $this->option('consultant') : null;
         $limit = (int) $this->option('limit');
-        $from = $ym . '-01';
-        $to = date('Y-m-t 23:59:59', strtotime($from));
 
-        $rows = DB::select(<<<'SQL'
-            WITH live AS (
-                SELECT consultant,
-                       COALESCE(SUM(CASE WHEN type = 'transaction' THEN "amountRUB" ELSE 0 END), 0)      AS tx,
-                       COALESCE(SUM(CASE WHEN type = 'nonTransactional' THEN "amountRUB" ELSE 0 END), 0) AS nontx,
-                       COALESCE(SUM("withheldForGap"), 0)                                                AS gap,
-                       COALESCE(SUM("withheldForCommission"), 0)                                         AS op,
-                       COUNT(*)                                                                          AS rows_all,
-                       COUNT(DISTINCT (COALESCE(transaction, -id), COALESCE("chainOrder", 0)))           AS rows_uniq
-                  FROM commission
-                 WHERE "dateMonth" = ? AND "deletedAt" IS NULL AND consultant IS NOT NULL
-                 GROUP BY consultant
-            ), pool AS (
-                SELECT consultant, COALESCE(SUM("poolBonus"), 0) AS pool
-                  FROM "poolLog"
-                 WHERE date BETWEEN ? AND ?
-                 GROUP BY consultant
-            )
-            SELECT COALESCE(b.consultant, live.consultant, pool.consultant) AS consultant,
-                   c."personName",
-                   COALESCE(b."accruedTransactional", 0) AS snap_tx,
-                   COALESCE(b."accruedNonTransactional", 0) AS snap_nontx,
-                   COALESCE(b."accruedPool", 0) AS snap_pool,
-                   COALESCE(live.tx, 0) AS live_tx,
-                   COALESCE(live.nontx, 0) AS live_nontx,
-                   COALESCE(pool.pool, 0) AS live_pool,
-                   COALESCE(live.gap, 0) AS gap,
-                   COALESCE(live.op, 0) AS op,
-                   COALESCE(live.rows_all, 0) AS rows_all,
-                   COALESCE(live.rows_uniq, 0) AS rows_uniq
-              FROM "consultantBalance" b
-              FULL JOIN live ON live.consultant = b.consultant AND b."dateMonth" = ?
-              FULL JOIN pool ON pool.consultant = COALESCE(b.consultant, live.consultant)
-              LEFT JOIN consultant c ON c.id = COALESCE(b.consultant, live.consultant, pool.consultant)
-             WHERE b."dateMonth" = ? OR b.id IS NULL
-        SQL, [$ym, $from, $to, $ym, $ym]);
+        $report = $this->inspector->inspect($ym, $only);
+        $drifted = $report['drifted'];
 
-        $drifted = [];
-        $poolDrift = 0;
-        $dupPartners = 0;
-        foreach ($rows as $r) {
-            if ($only && (int) $r->consultant !== $only) {
-                continue;
-            }
-            $dAccr = ((float) $r->snap_tx + (float) $r->snap_nontx) - ((float) $r->live_tx + (float) $r->live_nontx);
-            $dPool = (float) $r->snap_pool - (float) $r->live_pool;
-            $dups = (int) $r->rows_all - (int) $r->rows_uniq;
-            if ($dups > 0) {
-                $dupPartners++;
-            }
-            if (abs($dPool) > 0.01) {
-                $poolDrift++;
-            }
-            if (abs($dAccr) > 1 || abs($dPool) > 0.01 || $only) {
-                $drifted[] = [$r, $dAccr, $dPool, $dups];
-            }
-        }
-
-        usort($drifted, fn ($a, $b) => abs($b[1]) <=> abs($a[1]));
-
-        $this->info("Период {$ym}: строк — " . count($rows) . ', с расхождением — ' . count($drifted)
-            . ", пул разошёлся у {$poolDrift}, дубли commission у {$dupPartners}");
+        $this->info("Период {$ym}: строк — ".$report['rows'].', с расхождением — '.count($drifted)
+            .", пул разошёлся у {$report['poolDrift']}, дубли commission у {$report['dupPartners']}");
         $this->table(
             ['ID', 'Партнёр', 'снимок', 'live', 'Δ начисл.', 'пул снимок', 'пул log', 'удержано', 'дубли'],
             array_map(fn ($d) => [
-                $d[0]->consultant,
-                mb_substr((string) ($d[0]->personName ?? '—'), 0, 28),
-                $this->n((float) $d[0]->snap_tx + (float) $d[0]->snap_nontx),
-                $this->n((float) $d[0]->live_tx + (float) $d[0]->live_nontx),
-                $this->n($d[1]),
-                $this->n((float) $d[0]->snap_pool),
-                $this->n((float) $d[0]->live_pool),
-                $this->n((float) $d[0]->gap + (float) $d[0]->op),
-                $d[3] > 0 ? (string) $d[3] : '',
+                $d['row']->consultant,
+                mb_substr((string) ($d['row']->personName ?? '—'), 0, 28),
+                $this->n((float) $d['row']->snap_tx + (float) $d['row']->snap_nontx),
+                $this->n((float) $d['row']->live_tx + (float) $d['row']->live_nontx),
+                $this->n($d['accrual']),
+                $this->n((float) $d['row']->snap_pool),
+                $this->n((float) $d['row']->live_pool),
+                $this->n((float) $d['row']->gap + (float) $d['row']->op),
+                $d['dups'] > 0 ? (string) $d['dups'] : '',
             ], array_slice($drifted, 0, $limit))
         );
 
@@ -134,10 +81,11 @@ class DiagnoseMonthBalances extends Command
             $this->newLine();
             $this->comment('Δ начисл. > 0 — снимок выше строк commission (в отчёте «Итого начислено» без удержаний).');
             $this->comment("Починка: php artisan commission:resync-balances --month={$ym}");
+            $this->comment('Обычно чинить руками не нужно: это делает finance:autoheal-balances по расписанию.');
         }
 
         if ($this->option('notify')) {
-            $this->notify($ym, $drifted, $poolDrift, $dupPartners);
+            $this->notify($ym, $report);
         }
 
         return self::SUCCESS;
@@ -146,21 +94,21 @@ class DiagnoseMonthBalances extends Command
     /**
      * Оповещение о дрейфе снимка — по фронту, а не по факту.
      *
-     * Расхождение может держаться неделями (никто не нажал кнопку пересчёта),
-     * и ежедневное «всё ещё расходится» люди перестают читать через три дня.
-     * Поэтому отправляем только когда картина ИЗМЕНИЛАСЬ: дрейф появился,
-     * вырос, уменьшился или ушёл. Слепок сравнения — число партнёров с
-     * расхождением плюс суммарная величина, округлённая до рубля.
+     * Расхождение может держаться неделями, и ежедневное «всё ещё
+     * расходится» люди перестают читать через три дня. Поэтому отправляем
+     * только когда картина ИЗМЕНИЛАСЬ: дрейф появился, вырос, уменьшился или
+     * ушёл. Слепок сравнения — число партнёров с расхождением плюс суммарная
+     * величина, округлённая до рубля.
+     *
+     * @param  array{ym:string, rows:int, drifted:list<array{row:object, accrual:float, pool:float, dups:int}>, total:float, poolDrift:int, dupPartners:int}  $report
      */
-    private function notify(string $ym, array $drifted, int $poolDrift, int $dupPartners): void
+    private function notify(string $ym, array $report): void
     {
-        $total = 0.0;
-        foreach ($drifted as $d) {
-            $total += abs((float) $d[1]);
-        }
+        $drifted = $report['drifted'];
+        $total = $report['total'];
 
-        $fingerprint = count($drifted) . ':' . round($total) . ':' . $poolDrift . ':' . $dupPartners;
-        $cacheKey = 'balance-drift:' . $ym;
+        $fingerprint = count($drifted).':'.round($total).':'.$report['poolDrift'].':'.$report['dupPartners'];
+        $cacheKey = 'balance-drift:'.$ym;
         $previous = Cache::get($cacheKey);
 
         // Держим слепок дольше, чем интервал запуска, иначе истёкший кэш
@@ -189,21 +137,21 @@ class DiagnoseMonthBalances extends Command
             '⚠️ <b>Расхождение снимка начислений</b>',
             '',
             "Период: <b>{$ym}</b>",
-            'Партнёров с расхождением: <b>' . count($drifted) . '</b>',
-            'Суммарно: <b>' . $this->n($total) . ' ₽</b>',
+            'Партнёров с расхождением: <b>'.count($drifted).'</b>',
+            'Суммарно: <b>'.$this->n($total).' ₽</b>',
         ];
-        if ($poolDrift > 0) {
-            $lines[] = "Пул разошёлся у: <b>{$poolDrift}</b>";
+        if ($report['poolDrift'] > 0) {
+            $lines[] = 'Пул разошёлся у: <b>'.$report['poolDrift'].'</b>';
         }
-        if ($dupPartners > 0) {
-            $lines[] = "Дубли commission у: <b>{$dupPartners}</b>";
+        if ($report['dupPartners'] > 0) {
+            $lines[] = 'Дубли commission у: <b>'.$report['dupPartners'].'</b>';
         }
 
         // Три крупнейших — чтобы по сообщению было видно масштаб, а не только факт.
         $lines[] = '';
         foreach (array_slice($drifted, 0, 3) as $d) {
-            $name = mb_substr((string) ($d[0]->personName ?? ('ID ' . $d[0]->consultant)), 0, 30);
-            $lines[] = '• ' . $name . ' — ' . $this->n((float) $d[1]) . ' ₽';
+            $name = mb_substr((string) ($d['row']->personName ?? ('ID '.$d['row']->consultant)), 0, 30);
+            $lines[] = '• '.$name.' — '.$this->n($d['accrual']).' ₽';
         }
 
         $lines[] = '';
