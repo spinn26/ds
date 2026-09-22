@@ -48,40 +48,62 @@ class PartnerStatusService
                 return false;
             }
 
-        // Sum personalVolume across all non-deleted transactions for contracts
-        // owned by this consultant. For Active partners the period resets on
-        // yearPeriodEnd, so we only count transactions after the previous
-        // period end (= yearPeriodEnd - 1y); for Registered we count since
-        // dateCreated (activation window).
+            // ЛП периода считает periodPersonalVolume() — та же формула, по
+            // которой счётчик «Набрано N / 500» показывается партнёру. Колонка,
+            // по которой терминируют, и число в кабинете обязаны сходиться.
+            $lp = $this->periodPersonalVolume($consultant);
+
+            if ((float) ($consultant->personalVolume ?? 0) !== $lp) {
+                $consultant->personalVolume = $lp;
+                $consultant->save();
+            }
+
+            return $this->activate($consultant);
+        });
+    }
+
+    /**
+     * ЛП партнёра за ТЕКУЩИЙ период — активационный или годовой.
+     *
+     * Одна формула на двоих:
+     *   • recomputeVolumeAndActivate() кладёт результат в
+     *     consultant.personalVolume — по этой колонке идёт активация и
+     *     терминация за неактивность;
+     *   • getStatusInfo() показывает его партнёру счётчиком «Набрано N / 500».
+     *
+     * Считаем живьём, а не читаем колонку: она денормализована и обновляется
+     * ТОЛЬКО после расчёта комиссий по сделке. У партнёра, чьи транзакции
+     * через расчёт не проходили, колонка остаётся нулём (или значением
+     * прошлого года), и счётчик врёт про срок, по которому расторгают договор.
+     *
+     * Период: у «Активен» он годовой и обнуляется на yearPeriodEnd, поэтому
+     * начало = yearPeriodEnd − 1 год; у «Зарегистрирован» — дата создания
+     * (окно активации).
+     *
+     * Ручные баллы из «Прочих начислений» — тоже ЛП (✅Прочие начисления §3:
+     * «учитываются для поддержания статуса»). accrual_date — дата без времени,
+     * поэтому граница берётся с начала дня.
+     */
+    public function periodPersonalVolume(Consultant $consultant): float
+    {
         $periodStart = $consultant->activity === PartnerActivity::Active && $consultant->yearPeriodEnd
             ? Carbon::parse($consultant->yearPeriodEnd)->subYear()
             : ($consultant->dateCreated ?: Carbon::now()->subYears(10));
 
         $lp = (float) DB::table('transaction as t')
             ->join('contract as c', 'c.id', '=', 't.contract')
-            ->where('c.consultant', $consultantId)
+            ->where('c.consultant', $consultant->id)
             ->whereNull('t.deletedAt')
             ->whereNull('c.deletedAt')
             ->where('t.date', '>=', $periodStart)
             ->sum('t.personalVolume');
 
-        // Ручные баллы из «Прочих начислений» — тоже ЛП (✅Прочие начисления
-        // §3: «учитываются для поддержания статуса»). storeCharge кладёт их
-        // прямо в personalVolume, а пересчёт из одних транзакций их затирал:
-        // партнёр без сделок терял начисленные баллы при первом же расчёте
-        // комиссий. accrual_date — дата без времени, граница с начала дня.
         $lp += (float) DB::table('other_accruals')
-            ->where('consultant', $consultantId)
+            ->where('consultant', $consultant->id)
             ->where('accrual_date', '>=', Carbon::parse($periodStart)->startOfDay())
             ->sum('points');
 
-        if ((float) ($consultant->personalVolume ?? 0) !== $lp) {
-            $consultant->personalVolume = $lp;
-            $consultant->save();
-        }
-
-            return $this->activate($consultant);
-        });
+        return $lp;
     }
 
     /**
@@ -968,12 +990,14 @@ class PartnerStatusService
             ],
         ];
 
-        // Обратный отсчёт
+        // Обратный отсчёт. currentPoints — ЛП за период, посчитанные живьём
+        // (periodPersonalVolume), а не колонка карточки: партнёр должен видеть
+        // ровно ту сумму, по которой решается судьба его договора.
         if ($activity === PartnerActivity::Registered && $consultant->activationDeadline) {
             $info['activationDeadline'] = $consultant->activationDeadline->toIso8601String();
             $info['daysRemaining'] = max(0, (int) Carbon::now()->diffInDays($consultant->activationDeadline, false));
             $info['requiredPoints'] = PartnerActivity::activationPoints();
-            $info['currentPoints'] = (float) ($consultant->personalVolume ?? 0);
+            $info['currentPoints'] = round($this->periodPersonalVolume($consultant), 2);
         }
 
         if ($activity === PartnerActivity::Active) {
@@ -986,7 +1010,7 @@ class PartnerStatusService
                 $info['yearPeriodEnd'] = $endDate instanceof Carbon ? $endDate->toIso8601String() : Carbon::parse($endDate)->toIso8601String();
                 $info['daysRemaining'] = max(0, (int) Carbon::now()->diffInDays($endDate, false));
                 $info['requiredPoints'] = PartnerActivity::activationPoints();
-                $info['currentPoints'] = (float) ($consultant->personalVolume ?? 0);
+                $info['currentPoints'] = round($this->periodPersonalVolume($consultant), 2);
             }
         }
 

@@ -190,17 +190,17 @@ class DashboardService
             ->where('active', true)
             ->count();
 
-        // Status info (countdown, deadlines)
+        // Status info (countdown, deadlines).
+        //
+        // ⚠ currentPoints здесь НЕ подменяем. Раньше в счётчик «Набрано N/500»
+        // подставлялся $personalVolume — ЛП за ВЫБРАННЫЙ МЕСЯЦ, тогда как порог
+        // 500 считается за весь период (год у активного, окно активации у
+        // зарегистрированного). В месяце без продаж карточка показывала «0 из
+        // 500» любому партнёру: Чекан (1528) с 11,17 ЛП за год видел ноль.
+        // Подмену делали из недоверия к колонке consultant.personalVolume —
+        // теперь getStatusInfo не читает её вовсе, а считает период живьём
+        // (PartnerStatusService::periodPersonalVolume), так что лечить нечего.
         $statusInfo = $this->statusService->getStatusInfo($consultant);
-
-        // Прогресс активационного/годового периода берём из надёжного
-        // периодного ЛП (тот же $personalVolume, что в карточке «Личные
-        // продажи»), а не из сырой колонки consultant.personalVolume —
-        // она денормализована и может содержать устаревшее/несопоставимое
-        // значение (на проде встречались суммы в млн, при пороге 500).
-        if (isset($statusInfo['currentPoints'])) {
-            $statusInfo['currentPoints'] = round((float) $personalVolume, 2);
-        }
 
         // Mandatory GP plan fulfillment (ОП по ГП) — from Expert onwards
         ['mandatoryPlan' => $mandatoryPlan] = $this->buildMandatoryPlan($groupVolume, $statusLevel);

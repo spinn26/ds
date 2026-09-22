@@ -21,7 +21,10 @@ use Tests\TestCase;
  *     задваивают сумму;
  *   - уровень месяца — старший из номинального и расчётного;
  *   - деньги первой линии считаются по каноничному курсу платформы:
- *     один балл равен ста рублям.
+ *     один балл равен ста рублям;
+ *   - счётчик «Набрано N / 500» живёт по ПЕРИОДУ, а не по месяцу: это число,
+ *     по которому расторгают агентский договор, и обнулять его в месяце без
+ *     продаж нельзя.
  */
 class PartnerDashboardTest extends TestCase
 {
@@ -168,6 +171,54 @@ class PartnerDashboardTest extends TestCase
         $this->assertSame(self::MONTH, $this->dashboard()['period']);
     }
 
+    // ---------------- Счётчик периода (Набрано N / 500) ----------------
+
+    /**
+     * ⚠ Счётчик считает ВЕСЬ период, а не выбранный месяц.
+     *
+     * Кейс Чекана (1528): продажи в июне и июле, в сентябре пусто — карточка
+     * показывала «0 из 500», хотя за годовой период набрано 11,17 и до
+     * расторжения договора ещё далеко.
+     */
+    #[Test]
+    public function the_period_counter_survives_a_month_without_sales(): void
+    {
+        $this->activePeriod();
+        $this->ownDeal('2026-06-17 13:33:15', 3.69);
+
+        // Смотрим июль — в нём продаж нет.
+        $info = $this->dashboard()['statusInfo'];
+
+        $this->assertEqualsWithDelta(3.69, $info['currentPoints'], 0.01,
+            'месяц без продаж не обнуляет счётчик периода');
+        $this->assertSame(500, $info['requiredPoints']);
+    }
+
+    /** Сделки прошлого периода в счётчик не входят: год обнуляется. */
+    #[Test]
+    public function deals_before_the_period_start_do_not_count(): void
+    {
+        $this->activePeriod();
+        $this->ownDeal('2025-11-27 13:33:19', 1.23);
+        $this->ownDeal('2026-06-17 13:33:15', 3.69);
+
+        $this->assertEqualsWithDelta(3.69,
+            $this->dashboard()['statusInfo']['currentPoints'], 0.01);
+    }
+
+    /** Денормализованная колонка карточки на счётчик не влияет. */
+    #[Test]
+    public function the_period_counter_ignores_the_card_column(): void
+    {
+        $this->activePeriod();
+        DB::table('consultant')->where('id', self::PARTNER)
+            ->update(['personalVolume' => 9_999_999]);
+        $this->ownDeal('2026-06-17 13:33:15', 3.69);
+
+        $this->assertEqualsWithDelta(3.69,
+            $this->dashboard()['statusInfo']['currentPoints'], 0.01);
+    }
+
     // ================================================================
 
     /** @return array<string, mixed> */
@@ -204,6 +255,43 @@ class PartnerDashboardTest extends TestCase
             'personalVolume' => 0, 'groupVolume' => 0,
             'createdAt' => self::MONTH . '-15 00:00:00',
         ], $attrs));
+    }
+
+    /** Активный партнёр с годовым периодом 01.06.2026 → 01.06.2027. */
+    private function activePeriod(): void
+    {
+        DB::table('consultant')->where('id', self::PARTNER)->update([
+            'dateActivity' => '2026-06-01 00:00:00',
+            'yearPeriodEnd' => '2027-06-01 00:00:00',
+        ]);
+    }
+
+    /** Собственная сделка партнёра: контракт на него + транзакция с баллами. */
+    private function ownDeal(string $date, float $points): void
+    {
+        $contract = $this->seq++;
+
+        DB::table('contract')->insert([
+            'id' => $contract,
+            'consultant' => self::PARTNER,
+            'number' => 'PD-' . $contract,
+            'status' => 1,
+            'ammount' => 1_000,
+            'createDate' => $date,
+        ]);
+
+        DB::table('transaction')->insert([
+            'id' => $this->seq++,
+            'contract' => $contract,
+            'date' => $date,
+            'dateMonth' => substr($date, 0, 7),
+            'dateYear' => (int) substr($date, 0, 4),
+            'amountRUB' => 1_000,
+            'commissionsAmountRUB' => 0,
+            'netRevenueRUB' => 0,
+            'profitRUB' => 0,
+            'personalVolume' => $points,
+        ]);
     }
 
     private function seedFixture(): void

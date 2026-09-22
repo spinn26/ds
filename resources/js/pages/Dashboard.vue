@@ -80,15 +80,20 @@
         </div>
       </section>
 
-      <!-- Активационный период. На последнем месяце текст МЕНЯЕТСЯ и карточка
-           перестаёт закрываться: партнёр должен понимать, что на кону
-           расторжение договора, а не просто счётчик. -->
+      <!-- Срок по баллам. У «Зарегистрирован» это активационное окно, у
+           «Активен» — годовой период удержания: не набрал 500 ЛП за год —
+           договор расторгается. Называть второе «активацией» нельзя, партнёр
+           уже активен и читает это как «ещё не начал».
+           На последнем месяце текст МЕНЯЕТСЯ и карточка перестаёт
+           закрываться: на кону расторжение договора, а не просто счётчик. -->
       <section v-if="data.statusInfo && data.statusInfo.daysRemaining != null && !activationHidden"
         class="card activation" :class="{ 'activation--danger': deadlineSoon }">
         <header class="act-head">
           <span class="act-ic"><Flag :size="18" :stroke-width="1.8" /></span>
           <div class="act-title">
-            <b>{{ deadlineSoon ? 'До терминации ' + data.statusInfo.daysRemaining + ' ' + plural(data.statusInfo.daysRemaining, 'день', 'дня', 'дней') : 'Активационный период' }}</b>
+            <b>{{ deadlineSoon
+              ? 'До терминации ' + data.statusInfo.daysRemaining + ' ' + plural(data.statusInfo.daysRemaining, 'день', 'дня', 'дней')
+              : (isYearPeriod ? 'Годовой период' : 'Активационный период') }}</b>
             <span v-if="deadlineSoon">
               Если к {{ deadlineDate }} не набрать {{ fmt(data.statusInfo.requiredPoints) }} ЛП, агентский
               договор будет расторгнут: баллы обнулятся, клиенты и контракты перейдут наставнику.
@@ -97,6 +102,10 @@
                 {{ data.statusInfo.reinstate.limit }}
                 {{ plural(data.statusInfo.reinstate.limit, 'попытка', 'попытки', 'попыток') }}.
               </template>
+            </span>
+            <span v-else-if="isYearPeriod">
+              До {{ deadlineDate }} нужно набрать {{ fmt(data.statusInfo.requiredPoints) }} ЛП,
+              чтобы сохранить участие. Баллы периода считаются по вашим личным продажам.
             </span>
             <span v-else>Наберите {{ fmt(data.statusInfo.requiredPoints) }} баллов, чтобы активироваться</span>
           </div>
@@ -588,6 +597,10 @@ const deadlineSoon = computed(() => {
   const d = data.value.statusInfo?.daysRemaining;
   return d != null && d <= 30;
 });
+
+// Какой это срок. yearPeriodEnd приходит только для активного партнёра —
+// у него идёт годовой период удержания, а не активация.
+const isYearPeriod = computed(() => !!data.value.statusInfo?.yearPeriodEnd);
 
 // Дата срока: у «Зарегистрирован» — окно активации, у «Активен» — годовой период.
 const deadlineDate = computed(() => {
