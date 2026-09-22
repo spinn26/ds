@@ -148,9 +148,11 @@
     <div class="vol-grid">
       <router-link v-for="card in volumeCards" :key="card.title" :to="card.link" class="vol">
         <div class="vol-head">
+          <!-- Вся карточка — ссылка, поэтому клик по подсказке гасим:
+               иначе «i» уводила бы в отчёт вместо показа определения. -->
           <span class="vol-title">
             {{ card.title }}
-            <InfoHint v-if="card.hint" :text="card.hint" />
+            <span v-if="card.hint" @click.prevent.stop><InfoHint :text="card.hint" /></span>
           </span>
           <button v-if="card.dynamics" type="button" class="vol-ic" title="Динамика по времени"
             :aria-label="'Динамика: ' + card.title"
@@ -248,7 +250,10 @@
         <div class="team-grid">
           <router-link v-for="kpi in teamKpis" :key="kpi.label" :to="kpi.link" class="team-tile">
             <span class="team-ic"><UserRound :size="16" :stroke-width="1.8" /></span>
-            <span class="team-label">{{ kpi.label }}<InfoHint v-if="kpi.hint" :text="kpi.hint" /></span>
+            <span class="team-label">
+              {{ kpi.label }}
+              <span v-if="kpi.hint" @click.prevent.stop><InfoHint :text="kpi.hint" /></span>
+            </span>
             <span class="team-value num">{{ kpi.value }}</span>
           </router-link>
         </div>
