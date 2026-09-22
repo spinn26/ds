@@ -12,18 +12,21 @@
     </header>
 
     <div class="kpi">
+      <!-- Заголовок называет месяц снимка, а не «этот месяц»: ЛП и ГП берутся
+           из последнего собранного снимка, и пока пересчёт за текущий месяц не
+           сделан, это цифры прошлого. -->
       <div class="kpi-group">
-        <div class="kpi-group-title">Этот месяц</div>
+        <div class="kpi-group-title">{{ statsMonthLabel }}</div>
         <div class="kpi-cells">
           <router-link class="kpi-cell" to="/finance/report">
             <span class="kpi-label">ЛП</span>
             <span class="kpi-value info">{{ fmt(stats.personalVolume) }}</span>
-            <span class="kpi-cap">личные баллы</span>
+            <span class="kpi-cap">мои продажи</span>
           </router-link>
           <router-link class="kpi-cell" to="/structure">
             <span class="kpi-label">ГП</span>
             <span class="kpi-value info">{{ fmt(stats.groupVolume) }}</span>
-            <span class="kpi-cap">групповые баллы</span>
+            <span class="kpi-cap">я и вся команда</span>
           </router-link>
         </div>
       </div>
@@ -34,7 +37,7 @@
           <router-link class="kpi-cell" to="/dashboard">
             <span class="kpi-label">НГП</span>
             <span class="kpi-value accent">{{ fmt(stats.groupVolumeCumulative) }}</span>
-            <span class="kpi-cap">накоплено</span>
+            <span class="kpi-cap">накоплено за всё время</span>
           </router-link>
           <router-link class="kpi-cell" to="/dashboard">
             <span class="kpi-label">Квалификация</span>
@@ -44,7 +47,7 @@
             </span>
             <template v-if="progress != null">
               <span class="kpi-progress"><span :style="{ width: progress + '%' }"></span></span>
-              <span class="kpi-cap">{{ progress }}% до следующей</span>
+              <span class="kpi-cap">{{ progressLabel }} до следующей</span>
             </template>
             <span v-else class="kpi-cap">—</span>
           </router-link>
@@ -54,15 +57,18 @@
       <div class="kpi-group">
         <div class="kpi-group-title">База</div>
         <div class="kpi-cells">
+          <!-- Подписи названы по тому, что реально считается: клиентов берём
+               всех, а не только активных, команду — первую линию, а не всю
+               структуру (её число на «Дашборде», и оно другое). -->
           <router-link class="kpi-cell" to="/clients">
             <span class="kpi-label">Клиенты</span>
             <span class="kpi-value">{{ fmt(stats.clientCount) }}</span>
-            <span class="kpi-cap">активных</span>
+            <span class="kpi-cap">мои, всего</span>
           </router-link>
           <router-link class="kpi-cell" to="/structure">
             <span class="kpi-label">Команда</span>
             <span class="kpi-value">{{ fmt(stats.teamCount) }}</span>
-            <span class="kpi-cap">в структуре</span>
+            <span class="kpi-cap">первая линия</span>
           </router-link>
         </div>
       </div>
@@ -88,6 +94,30 @@ const props = defineProps({
 const progress = computed(() => {
   const p = props.stats.qualificationProgress;
   return p == null ? null : Math.max(0, Math.min(100, Math.round(p)));
+});
+
+// Округление превращало 0,62% в «1%» — партнёр с 12 баллами из 2000 читал,
+// что процент пути уже пройден. Ниже процента говорим словами.
+const progressLabel = computed(() => {
+  const p = props.stats.qualificationProgress;
+  if (p == null) return '';
+  if (p <= 0) return '0%';
+  if (p < 1) return 'меньше 1%';
+  return Math.round(p) + '%';
+});
+
+// Месяц снимка прописью: «сентябрь 2026». Пока бэкенд его не отдал —
+// нейтральное «Последний снимок», но не «Этот месяц».
+const statsMonthLabel = computed(() => {
+  const raw = props.stats.statsMonth;
+  if (!raw) return 'Последний снимок';
+  const [y, m] = String(raw).split('-');
+  const names = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+    'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+  const name = names[Number(m) - 1];
+  if (!name) return 'Последний снимок';
+  const now = new Date().toISOString().slice(0, 7);
+  return raw === now ? `${name} ${y} · этот месяц` : `${name} ${y}`;
 });
 
 function fmt(v) {

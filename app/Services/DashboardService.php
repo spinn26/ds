@@ -101,7 +101,12 @@ class DashboardService
         // («Отрыва нет» / «≥70% удержание ГП» / «≥90% блокировка пула»).
         // Возвращаем всегда (если есть qualificationLog) с топ-веткой, даже
         // когда отрыва формально нет — фронту нужно показать прогресс-шкалу.
-        $breakaway = $this->buildBreakawaySummary($consultant->id, $month, $currentQLog);
+        //
+        // ⚠ Снимок берём за ВЫБРАННЫЙ период ($levelQLog), а не последний
+        // вообще: раньше при просмотре июня карточка показывала сентябрьский
+        // отрыв — рядом с июньскими объёмами. Правило то же, что у уровня:
+        // период, а если снимка за него ещё нет — последний имеющийся.
+        $breakaway = $this->buildBreakawaySummary($consultant->id, $month, $levelQLog);
 
         // Personal/Group volumes for period — ТОЛЬКО снимок (qualificationLog),
         // без live-пересчёта. Снимок обновляется по кнопке пересчёта руководителем
@@ -209,7 +214,9 @@ class DashboardService
         // Per spec ✅Расчет пула §6.4: пул не выплачивается если
         //   (а) ОП по ГП не выполнен на 100% — или
         //   (б) у партнёра отрыв ≥ 90% (одна ветка занимает >90% от ГП).
-        ['poolInfo' => $poolInfo] = $this->buildPoolInfo($currentQLog, $mandatoryPlan, $statusLevel);
+        // Снимок — за выбранный период, как у отрыва и уровня: ОП считается по
+        // ГП месяца, и брать к нему отрыв из другого месяца нельзя.
+        ['poolInfo' => $poolInfo] = $this->buildPoolInfo($levelQLog, $mandatoryPlan, $statusLevel);
 
         // Breakaway rules (отрыв) — structured info
         $breakawayRules = null;
@@ -426,23 +433,23 @@ class DashboardService
      *   gpHeld:bool, poolBlocked:bool
      * }|null
      */
-    private function buildBreakawaySummary(int $consultantId, string $month, ?QualificationLog $qLogCurrent): ?array
+    private function buildBreakawaySummary(int $consultantId, string $month, ?QualificationLog $qLogPeriod): ?array
     {
-        if (! $qLogCurrent) return null;
+        if (! $qLogPeriod) return null;
 
-        $hasGap   = (bool) ($qLogCurrent->gap ?? false);
-        $branchId = $qLogCurrent->branchWithGap;
+        $hasGap   = (bool) ($qLogPeriod->gap ?? false);
+        $branchId = $qLogPeriod->branchWithGap;
         $branchName = $branchId
             ? DB::table('consultant')->where('id', $branchId)->value('personName')
             : null;
-        $branchGv = (float) ($qLogCurrent->branchWithGapGroupVolume ?? 0);
-        $gapPct   = (float) ($qLogCurrent->gapValuePercentage ?? 0);
-        $gapVal   = (float) ($qLogCurrent->gapValue ?? 0);
+        $branchGv = (float) ($qLogPeriod->branchWithGapGroupVolume ?? 0);
+        $gapPct   = (float) ($qLogPeriod->gapValuePercentage ?? 0);
+        $gapVal   = (float) ($qLogPeriod->gapValue ?? 0);
 
         // Если в qLog имени нет (orphan-импорт / отрыв глубже первой
         // линии / branchWithGap=null) — ищем сами.
         if (empty($branchName)) {
-            $myGv = (float) ($qLogCurrent->groupVolumeCumulative ?? 0);
+            $myGv = (float) ($qLogPeriod->groupVolumeCumulative ?? 0);
             $monthStart = $month . '-01';
             $monthEnd = date('Y-m-d', strtotime("$monthStart +1 month"));
 
@@ -603,12 +610,12 @@ class DashboardService
      *
      * @return array<string, mixed>
      */
-    private function buildPoolInfo($currentQLog, $mandatoryPlan, $statusLevel): array
+    private function buildPoolInfo($periodQLog, $mandatoryPlan, $statusLevel): array
     {
         $poolInfo = null;
         if ($statusLevel && ($statusLevel->pool ?? 0) > 0) {
             $opFulfilled = $mandatoryPlan ? (bool) $mandatoryPlan['fulfilled'] : true;
-            $gapPct = (float) ($currentQLog->gapValuePercentage ?? 0);
+            $gapPct = (float) ($periodQLog->gapValuePercentage ?? 0);
             $gapDisqualifies = $gapPct > 90.0;
             $poolEligible = $opFulfilled && ! $gapDisqualifies;
             $reason = null;

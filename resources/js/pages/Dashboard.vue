@@ -3,7 +3,10 @@
     <header class="dash-head">
       <div>
         <h1>Дашборд партнёра</h1>
-        <p>Квалификация, объёмы и команда за выбранный месяц</p>
+        <!-- Не «всё за выбранный месяц»: НГП копится за всё время, состав
+             команды и клиенты — состояние на сегодня. У каждой плашки ниже
+             написан свой период, чтобы цифры не читались как месячные. -->
+        <p>Объёмы и квалификация — за выбранный месяц. Команда и клиенты — на сегодня.</p>
       </div>
       <MonthPicker v-model="period" @update:model-value="loadData" />
     </header>
@@ -33,7 +36,10 @@
         <div class="hero-panel">
           <template v-if="data.qualification.nextLevel">
             <div class="hp-row">
-              <span class="hp-label">НГП до «{{ data.qualification.nextLevel.title }}»</span>
+              <span class="hp-label">
+                НГП до «{{ data.qualification.nextLevel.title }}»
+                <i class="hp-scope">накоплено за всё время</i>
+              </span>
               <span class="hp-value">
                 <b>{{ fmt(data.volumes.groupVolumeCumulative) }}</b>
                 / {{ fmt(data.qualification.nextLevel.groupVolumeCumulative) }}
@@ -44,9 +50,11 @@
               <span>{{ currentLevel?.level ?? '—' }} · {{ currentLevel?.title ?? 'Start' }}</span>
               <span>{{ data.qualification.nextLevel.level }} · {{ data.qualification.nextLevel.title }}</span>
             </div>
+            <!-- Доля пути округлялась до целых, и 0,62% превращались в «1%»:
+                 партнёр с 12 баллами из 2000 читал, что прошёл процент. -->
             <p class="hp-note">
               Осталось <b>{{ fmt(Math.max(0, (data.qualification.nextLevel.groupVolumeCumulative || 0) - data.volumes.groupVolumeCumulative)) }}</b>
-              баллов НГП — это {{ Math.round(nqpProgress) }}% пути
+              баллов НГП — это {{ progressLabel }} пути
             </p>
           </template>
           <p v-else class="hp-note hp-note--max">Максимальная квалификация достигнута</p>
@@ -62,7 +70,10 @@
           <!-- ОП по ГП: обязательный групповой план текущего уровня. -->
           <div v-if="data.mandatoryPlan" class="hp-mandatory">
             <div class="hp-row">
-              <span class="hp-label">ОП по ГП</span>
+              <span class="hp-label">
+                ОП по ГП
+                <i class="hp-scope">{{ monthLabel }} · я и вся команда</i>
+              </span>
               <span class="hp-value">
                 <b>{{ fmt(data.mandatoryPlan.currentGP) }}</b> / {{ fmt(data.mandatoryPlan.mandatoryGP) }}
               </span>
@@ -137,7 +148,10 @@
     <div class="vol-grid">
       <router-link v-for="card in volumeCards" :key="card.title" :to="card.link" class="vol">
         <div class="vol-head">
-          <span class="vol-title">{{ card.title }}</span>
+          <span class="vol-title">
+            {{ card.title }}
+            <InfoHint v-if="card.hint" :text="card.hint" />
+          </span>
           <button v-if="card.dynamics" type="button" class="vol-ic" title="Динамика по времени"
             :aria-label="'Динамика: ' + card.title"
             @click.prevent.stop="openDynamics(card.dynamics)">
@@ -148,6 +162,11 @@
           </span>
         </div>
 
+        <!-- Период и охват у каждой карточки свои: ЛП — мой месяц, НГП —
+             всё время и вся команда. Без этой строки «0» в ЛП рядом с
+             непустым НГП читается как сбой. -->
+        <div class="vol-scope">{{ card.scope }}</div>
+
         <div class="vol-value" :class="card.tone">{{ fmt(card.value) }}</div>
         <div v-if="card.subValue" class="vol-sub">{{ card.subValue }}</div>
         <div v-if="card.pending > 0" class="vol-pending">
@@ -157,7 +176,7 @@
         <div class="vol-delta" :class="card.changeType">
           <component :is="card.changeType === 'up' ? TrendingUp : card.changeType === 'down' ? TrendingDown : Minus"
             :size="14" :stroke-width="1.8" />
-          {{ card.change }} <span>к прошлому месяцу</span>
+          {{ card.change }} <span>{{ card.changeNote }}</span>
         </div>
       </router-link>
     </div>
@@ -165,7 +184,10 @@
     <!-- Отрыв: те же пороги 70/90, что в финрезе. -->
     <section v-if="data.breakaway" class="card breakaway">
       <header class="bw-head">
-        <h2 class="card-h"><Network :size="18" :stroke-width="1.8" />Отрыв</h2>
+        <h2 class="card-h">
+          <Network :size="18" :stroke-width="1.8" />Отрыв
+          <span class="card-scope">{{ monthLabel }}</span>
+        </h2>
         <span class="bw-chip" :class="breakawayTone">
           <component :is="data.breakaway.poolBlocked ? AlertOctagon : data.breakaway.gpHeld ? AlertCircle : CheckCircle2"
             :size="14" :stroke-width="1.8" />
@@ -214,21 +236,31 @@
     </section>
 
     <div class="two-col">
-      <!-- Команда: каждая плитка → структура с готовым фильтром. -->
+      <!-- Команда: каждая плитка → структура с готовым фильтром.
+           ⚠ Состав считается на сегодня, а не на конец выбранного месяца:
+           истории членства в структуре платформа не хранит. Говорим это
+           подписью, чтобы цифры не выдавали себя за месячные. -->
       <section class="card">
-        <h2 class="card-h"><Users :size="18" :stroke-width="1.8" />Команда</h2>
+        <h2 class="card-h">
+          <Users :size="18" :stroke-width="1.8" />Команда
+          <span class="card-scope">на сегодня</span>
+        </h2>
         <div class="team-grid">
           <router-link v-for="kpi in teamKpis" :key="kpi.label" :to="kpi.link" class="team-tile">
             <span class="team-ic"><UserRound :size="16" :stroke-width="1.8" /></span>
-            <span class="team-label">{{ kpi.label }}</span>
+            <span class="team-label">{{ kpi.label }}<InfoHint v-if="kpi.hint" :text="kpi.hint" /></span>
             <span class="team-value num">{{ kpi.value }}</span>
           </router-link>
         </div>
       </section>
 
-      <!-- Клиенты: двумя строками, каждая → список с нужным охватом. -->
+      <!-- Клиенты: двумя строками, каждая → список с нужным охватом.
+           Тоже состояние на сегодня, не срез месяца. -->
       <section class="card">
-        <h2 class="card-h"><UserRound :size="18" :stroke-width="1.8" />Клиенты</h2>
+        <h2 class="card-h">
+          <UserRound :size="18" :stroke-width="1.8" />Клиенты
+          <span class="card-scope">на сегодня</span>
+        </h2>
         <router-link to="/clients?scope=team" class="cl-row">
           <span class="cl-ic"><Users :size="16" :stroke-width="1.8" /></span>
           <span class="cl-label">Клиенты команды</span>
@@ -244,15 +276,22 @@
       </section>
     </div>
 
-    <!-- Партнёры по статусу: всего слева, состав — полосой и легендой. -->
+    <!-- Партнёры по статусу: всего слева, состав — полосой и легендой.
+         Счёт — на сегодня; сравнение с концом прошлого месяца имеет смысл
+         только когда открыт текущий месяц, иначе сравнивались бы «сегодня»
+         и «конец месяца, соседнего с выбранным». В прошлых месяцах дельту
+         не показываем вовсе. -->
     <section class="card partners">
-      <h2 class="card-h"><Users :size="18" :stroke-width="1.8" />Партнёры по статусу</h2>
+      <h2 class="card-h">
+        <Users :size="18" :stroke-width="1.8" />Партнёры по статусу
+        <span class="card-scope">на сегодня</span>
+      </h2>
 
       <div class="pt-body">
         <router-link class="pt-total" :to="partnerCards[0].link">
           <span class="pt-cap">{{ partnerCards[0].label }}</span>
           <span class="pt-num num">{{ partnerCards[0].value }}</span>
-          <span class="pt-delta" :class="deltaTone(partnerCards[0].diff)">
+          <span v-if="isCurrentMonth" class="pt-delta" :class="deltaTone(partnerCards[0].diff)">
             <component :is="partnerCards[0].diff > 0 ? TrendingUp : partnerCards[0].diff < 0 ? TrendingDown : Minus"
               :size="14" :stroke-width="1.8" />
             {{ partnerCards[0].diff > 0 ? '+' : '' }}{{ partnerCards[0].diff }} <span>к прошлому месяцу</span>
@@ -269,7 +308,7 @@
               <span class="pt-dot" :class="toneOf(card.color)"></span>
               <span class="pt-label">{{ card.label }}</span>
               <span class="pt-value num">{{ card.value }}</span>
-              <span v-if="card.diff != null" class="pt-delta" :class="deltaTone(card.diff)">
+              <span v-if="isCurrentMonth && card.diff != null" class="pt-delta" :class="deltaTone(card.diff)">
                 <component :is="card.diff > 0 ? TrendingUp : card.diff < 0 ? TrendingDown : Minus"
                   :size="13" :stroke-width="1.8" />
                 {{ card.diff > 0 ? '+' : '' }}{{ card.diff }}
@@ -652,6 +691,9 @@ const volumeCards = computed(() => {
   return [
     { title: 'Личные продажи (ЛП)', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green', tone: 'info', lucide: 'bank',
       hint: glossary.lp,
+      // Период и охват — на самой карточке: три цифры рядом считаются по
+      // разным правилам, и без подписи ноль в одной выглядит ошибкой.
+      scope: monthLabel.value + ' · мои продажи', changeNote: 'к прошлому месяцу',
       pending: p?.personalVolume || 0, projected: p?.projectedPersonalVolume || 0,
       // У каждой карточки своя метрика: график считает по контрактам того
       // круга, о котором карточка. Один общий график был бы неверным —
@@ -660,6 +702,9 @@ const volumeCards = computed(() => {
       link: { path: '/finance/report', query: { month: period.value, metric: 'lp' } } },
     { title: 'НГП', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange', tone: 'accent', lucide: 'trend',
       hint: glossary.ngp,
+      // Накопительный показатель: он не обнуляется в месяце без продаж и
+      // включает продажи всей структуры, а не только свои.
+      scope: 'за всё время · я и вся команда', changeNote: 'прирост к прошлому месяцу',
       pending: p?.groupVolume || 0, projected: p?.projectedGroupVolumeCumulative || 0,
       dynamics: { metric: 'team', title: 'Продажи команды' },
       link: { path: '/finance/report', query: { month: period.value, metric: 'ngp' } } },
@@ -667,6 +712,7 @@ const volumeCards = computed(() => {
     { title: 'Объём 1 линии', value: v.firstLineVolume, subValue: fmtMoney(v.firstLineVolumeRub),
       change: fl.value, changeType: fl.type, icon: 'mdi-account-arrow-right', color: 'blue', tone: '', lucide: 'users',
       hint: glossary.firstLineVolume,
+      scope: monthLabel.value + ' · продажи приглашённых', changeNote: 'к прошлому месяцу',
       dynamics: { metric: 'first_line', title: 'Объём первой линии' },
       link: { path: '/structure', query: { line: '1' } } },
   ];
@@ -714,6 +760,28 @@ const nqpProgress = computed(() => {
   const target = data.value.qualification.nextLevel?.groupVolumeCumulative || 1;
   return Math.min((data.value.volumes.groupVolumeCumulative / target) * 100, 100);
 });
+
+// Доля пути до следующего уровня словами. Math.round() превращал 0,62% в
+// «1%» — партнёр с 12 баллами из 2000 читал, что процент уже прошёл.
+const progressLabel = computed(() => {
+  const p = nqpProgress.value;
+  if (p <= 0) return '0%';
+  if (p < 1) return 'меньше 1%';
+  return Math.round(p) + '%';
+});
+
+// Название выбранного месяца прописью — подпись периода на плашках.
+const monthLabel = computed(() => {
+  const [y, m] = String(period.value || '').split('-');
+  const names = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+    'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+  const name = names[Number(m) - 1];
+  return name ? `${name} ${y}` : 'выбранный месяц';
+});
+
+// Открыт текущий месяц или архивный. От этого зависит, показывать ли
+// сравнения «к прошлому месяцу» у плашек, считающихся на сегодня.
+const isCurrentMonth = computed(() => period.value === new Date().toISOString().slice(0, 7));
 
 async function loadData() {
   loading.value = true;
@@ -781,6 +849,14 @@ onMounted(async () => {
   font: 600 17px/24px var(--font-sans);
 }
 .card-h svg { color: var(--brand); }
+/* Подпись периода/охвата в заголовке карточки: «на сегодня», «сентябрь 2026».
+   Тише заголовка, но всегда на виду — это и есть защита от чтения чужого
+   периода как своего. */
+.card-scope {
+  font: 400 12px/16px var(--font-sans);
+  color: var(--ink-muted);
+  letter-spacing: 0;
+}
 
 .num { font-variant-numeric: tabular-nums; }
 
@@ -864,6 +940,14 @@ onMounted(async () => {
 }
 .hp-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .hp-label { font: 400 13px/20px var(--font-sans); color: var(--on-brand-deep-muted); }
+/* Период/охват строки на тёмной панели — отдельной строкой под подписью. */
+.hp-scope {
+  display: block;
+  font: 400 11px/16px var(--font-sans);
+  font-style: normal;
+  color: var(--on-brand-deep-muted);
+  opacity: 0.75;
+}
 .hp-value { font: 400 13px/20px var(--font-sans); color: var(--on-brand-deep-muted); font-variant-numeric: tabular-nums; }
 .hp-value b { font: 700 18px/24px var(--font-sans); color: var(--on-brand-deep); }
 .hp-bar { height: 8px; border-radius: var(--radius-pill); background: var(--brand-deep); overflow: hidden; }
@@ -953,7 +1037,15 @@ onMounted(async () => {
 .vol:hover { box-shadow: var(--shadow-hover); }
 .vol:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .vol-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
-.vol-title { font: 400 13px/20px var(--font-sans); color: var(--ink-muted); }
+.vol-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 400 13px/20px var(--font-sans);
+  color: var(--ink-muted);
+}
+/* Период и охват карточки объёма — под заголовком, над числом. */
+.vol-scope { font: 400 11px/16px var(--font-sans); color: var(--ink-subtle, var(--ink-muted)); opacity: 0.85; }
 .vol-ic {
   display: inline-flex;
   align-items: center;
@@ -1085,7 +1177,13 @@ onMounted(async () => {
   background: var(--surface);
   color: var(--brand);
 }
-.team-label { font: 400 13px/18px var(--font-sans); color: var(--ink-muted); }
+.team-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 400 13px/18px var(--font-sans);
+  color: var(--ink-muted);
+}
 .team-value { font: 700 20px/26px var(--font-sans); letter-spacing: -0.02em; }
 
 .cl-row {

@@ -205,6 +205,11 @@ class WorkspaceController extends Controller
             'levelsDontMatch' => $levelsDontMatch,
             'clientCount' => $clientCount,
             'teamCount' => $childrenCount,
+            // Месяц снимка, из которого взяты ЛП и ГП. Полоса подписывала их
+            // «Этот месяц», хотя берётся ПОСЛЕДНИЙ снимок: пока пересчёт за
+            // текущий месяц не собран, там цифры прошлого. Пусть подпись
+            // называет месяц честно.
+            'statsMonth' => $qLog && $qLog->date ? substr((string) $qLog->date, 0, 7) : null,
         ];
     }
 

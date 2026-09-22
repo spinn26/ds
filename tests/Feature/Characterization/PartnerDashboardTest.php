@@ -171,6 +171,37 @@ class PartnerDashboardTest extends TestCase
         $this->assertSame(self::MONTH, $this->dashboard()['period']);
     }
 
+    // ---------------- Отрыв ----------------
+
+    /**
+     * ⚠ Отрыв показывается за ВЫБРАННЫЙ месяц, а не из последнего снимка.
+     *
+     * Раньше карточка брала самый свежий qualificationLog: открыв июль, партнёр
+     * видел июльские объёмы и сентябрьский отрыв рядом.
+     */
+    #[Test]
+    public function the_breakaway_comes_from_the_selected_month(): void
+    {
+        // ⚠ branchWithGap здесь не заполняем: колонка ссылается на
+        // qualificationLog(id), а не на партнёра. Для проверки периода хватает
+        // процента отрыва.
+        $this->qlog(self::PARTNER, self::MONTH . '-15', [
+            'groupVolume' => 1_000, 'groupVolumeCumulative' => 1_000,
+            'gap' => false, 'gapValuePercentage' => 10,
+        ]);
+        // Снимок более позднего месяца с крупным отрывом.
+        $this->qlog(self::PARTNER, '2026-08-31', [
+            'groupVolume' => 1_000, 'groupVolumeCumulative' => 2_000,
+            'gap' => true, 'gapValuePercentage' => 95,
+        ]);
+
+        $bw = $this->dashboard()['breakaway'];
+
+        $this->assertEqualsWithDelta(10, $bw['gapPercentage'], 0.01,
+            'взят снимок выбранного месяца, а не последний');
+        $this->assertFalse($bw['hasGap']);
+    }
+
     // ---------------- Счётчик периода (Набрано N / 500) ----------------
 
     /**
