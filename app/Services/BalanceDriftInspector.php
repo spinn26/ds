@@ -34,7 +34,7 @@ class BalanceDriftInspector
      * @return array{
      *     ym: string,
      *     rows: int,
-     *     drifted: list<array{row: object, accrual: float, pool: float, dups: int}>,
+     *     drifted: list<array{row: \stdClass, accrual: float, pool: float, dups: int}>,
      *     total: float,
      *     poolDrift: int,
      *     dupPartners: int
@@ -103,7 +103,7 @@ class BalanceDriftInspector
                 $poolDrift++;
             }
             if (abs($accrual) > self::ACCRUAL_EPS || abs($pool) > self::POOL_EPS || $onlyConsultant) {
-                $drifted[] = ['row' => (object) $r, 'accrual' => $accrual, 'pool' => $pool, 'dups' => $dups];
+                $drifted[] = ['row' => $r, 'accrual' => $accrual, 'pool' => $pool, 'dups' => $dups];
                 $total += abs($accrual);
             }
         }

@@ -100,7 +100,7 @@ class DiagnoseMonthBalances extends Command
      * ушёл. Слепок сравнения — число партнёров с расхождением плюс суммарная
      * величина, округлённая до рубля.
      *
-     * @param  array{ym:string, rows:int, drifted:list<array{row:object, accrual:float, pool:float, dups:int}>, total:float, poolDrift:int, dupPartners:int}  $report
+     * @param  array{ym:string, rows:int, drifted:list<array{row:\stdClass, accrual:float, pool:float, dups:int}>, total:float, poolDrift:int, dupPartners:int}  $report
      */
     private function notify(string $ym, array $report): void
     {

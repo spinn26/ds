@@ -132,7 +132,7 @@ class AutohealMonthBalances extends Command
     /**
      * Пересборка снимка + проверка, что она действительно помогла.
      *
-     * @param  array{ym:string, rows:int, drifted:list<array{row:object, accrual:float, pool:float, dups:int}>, total:float, poolDrift:int, dupPartners:int}  $report
+     * @param  array{ym:string, rows:int, drifted:list<array{row:\stdClass, accrual:float, pool:float, dups:int}>, total:float, poolDrift:int, dupPartners:int}  $report
      */
     private function heal(string $ym, array $report): void
     {
@@ -235,7 +235,7 @@ class AutohealMonthBalances extends Command
      * Расхождение есть, но чинить нельзя. Шлём по ФРОНТУ, а не по факту:
      * ежедневное «всё ещё расходится» люди перестают читать через три дня.
      *
-     * @param  array{ym:string, rows:int, drifted:list<array{row:object, accrual:float, pool:float, dups:int}>, total:float, poolDrift:int, dupPartners:int}  $report
+     * @param  array{ym:string, rows:int, drifted:list<array{row:\stdClass, accrual:float, pool:float, dups:int}>, total:float, poolDrift:int, dupPartners:int}  $report
      */
     private function onBlocked(string $ym, array $report, string $reason): void
     {
