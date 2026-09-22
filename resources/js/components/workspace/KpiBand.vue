@@ -116,7 +116,10 @@ const statsMonthLabel = computed(() => {
     'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
   const name = names[Number(m) - 1];
   if (!name) return 'Последний снимок';
-  const now = new Date().toISOString().slice(0, 7);
+  // Местное время, не UTC: вечером последнего числа месяца toISOString()
+  // назвал бы текущим ещё прошлый месяц.
+  const d = new Date();
+  const now = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   return raw === now ? `${name} ${y} · этот месяц` : `${name} ${y}`;
 });
 

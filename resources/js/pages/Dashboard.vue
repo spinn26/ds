@@ -781,7 +781,14 @@ const monthLabel = computed(() => {
 
 // Открыт текущий месяц или архивный. От этого зависит, показывать ли
 // сравнения «к прошлому месяцу» у плашек, считающихся на сегодня.
-const isCurrentMonth = computed(() => period.value === new Date().toISOString().slice(0, 7));
+// Месяц берём по местному времени: toISOString() отдаёт UTC и вечером
+// последнего числа месяца в Москве показал бы ещё прошлый месяц.
+const isCurrentMonth = computed(() => period.value === currentMonthKey());
+
+function currentMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 async function loadData() {
   loading.value = true;
