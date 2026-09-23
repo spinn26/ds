@@ -98,6 +98,51 @@ class PermissionGridGateTest extends TestCase
         $this->assertNotSame(403, $status, 'полный уровень не должен упираться в права');
     }
 
+    // ---------------- Роли под сплошным read-only гардом ----------------
+
+    /**
+     * ⚠ Руководитель (head) — read-only по всей админке, КРОМЕ секций, которые
+     * гард осознанно отдал матрице. «Отчёты» — одна из них: уровень в колонке
+     * решает, может ли руководитель сгенерировать отчёт.
+     *
+     * До 22.09.2026 матрица показывала «Полный», кнопка в UI была, а сервер
+     * отвечал 403 — матрица обещала одно, платформа делала другое.
+     */
+    #[Test]
+    public function the_head_generates_a_report_when_the_grid_allows_it(): void
+    {
+        $this->setLevel('head', 'reports', 'full');
+
+        $status = $this->call('POST', '/api/v1/admin/reports/generate', [], [], [],
+            $this->headers($this->user('head')))->status();
+
+        $this->assertNotSame(403, $status, 'полный уровень на «Отчётах» пропускает руководителя');
+    }
+
+    /** Уровень «Просмотр» в той же колонке генерацию не даёт. */
+    #[Test]
+    public function the_head_is_refused_with_a_view_level(): void
+    {
+        $this->setLevel('head', 'reports', 'view');
+
+        $this->call('POST', '/api/v1/admin/reports/generate', [], [], [],
+            $this->headers($this->user('head')))->assertForbidden();
+    }
+
+    /**
+     * ⚠ Делегирование матрице — точечное. В разделах, которые гард НЕ отдавал,
+     * руководитель остаётся read-only, даже если в матрице стоит «Полный»:
+     * часть уровней там проставлена миграциями ради видимости пункта меню.
+     */
+    #[Test]
+    public function the_head_stays_read_only_outside_the_delegated_sections(): void
+    {
+        $this->setLevel('head', 'charges', 'full');
+
+        $this->call('POST', '/api/v1/admin/charges', [], [], [],
+            $this->headers($this->user('head')))->assertForbidden();
+    }
+
     /** Партнёр не проходит ни один раздел, какой бы уровень ни стоял. */
     #[Test]
     #[DataProvider('guardedRoutes')]

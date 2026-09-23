@@ -320,7 +320,11 @@ Route::put('/admin/charges/{id}', [\App\Http\Controllers\Api\AdminFinanceControl
 Route::delete('/admin/charges/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'deleteCharge'])->whereNumber('id')->middleware('permission:charges,full');
 Route::get('/admin/payments', [\App\Http\Controllers\Api\AdminFinanceController::class, 'payments']);
 Route::get('/admin/reports/archive', [\App\Http\Controllers\Api\AdminFinanceController::class, 'reportArchive']);
-Route::post('/admin/reports/generate', [\App\Http\Controllers\Api\AdminFinanceController::class, 'generateReport'])->middleware('throttle:30,1');
+// Генерация отчёта — единственная запись в разделе (создаёт строку архива и
+// файл). Гейт по матрице: до 22.09.2026 его не было вовсе, и уровень в
+// колонке «Отчёты» ни на что не влиял — у роли с «Полным» кнопка была, а
+// сервер отвечал 403 через restrict.head.
+Route::post('/admin/reports/generate', [\App\Http\Controllers\Api\AdminFinanceController::class, 'generateReport'])->middleware(['throttle:30,1', 'permission:reports,edit']);
 Route::get('/admin/reports/{id}/download', [\App\Http\Controllers\Api\AdminFinanceController::class, 'downloadReport'])->whereNumber('id');
 Route::get('/admin/currencies', [\App\Http\Controllers\Api\AdminFinanceController::class, 'currencies']);
 Route::patch('/admin/currencies/rates/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateCurrencyRate'])->whereNumber('id')->middleware('permission:currencies,full');
