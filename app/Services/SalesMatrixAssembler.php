@@ -507,18 +507,18 @@ class SalesMatrixAssembler
             ->select([
                 'co.product as pid',
                 't.dateMonth as m',
-                // Объём факта = сумма транзакций (t.amountRUB). Раньше тут был
-                // co.ammount×rate на запросе с грануляцией по ТРАНЗАКЦИЯМ → сумма
-                // контракта задваивалась на число его транзакций (объём ×~2.7,
-                // расходился с партнёрским отчётом). Кол-во/выручка/баллы — уже
-                // per-transaction, поэтому совпадали.
-                DB::raw('SUM(COALESCE(t."amountRUB",0)) as volume'),
+                // Объём факта = суммы транзакций, пересчитанные по
+                // управленческому курсу месяца (см. SalesMatrixSupport).
+                // Брать co.ammount×rate нельзя: запрос гранулирован по
+                // ТРАНЗАКЦИЯМ, и сумма контракта задваивалась бы на число его
+                // платежей (объём ×~2.7, расходился с партнёрским отчётом).
+                DB::raw('SUM('.$this->matrixSupport->transactionVolumeExpr().') as volume'),
                 // Кол-во = контракты, а не транзакции: по контракту за месяц
                 // проходит несколько транзакций. Слои «Активировано» и «В
                 // работе» рядом считают именно контракты — иначе «Итого»
                 // складывало бы разные единицы измерения.
                 DB::raw('COUNT(DISTINCT co.id) as cnt'),
-                DB::raw('SUM(COALESCE(t."commissionsAmountRUB",0)) as revenue'),
+                DB::raw('SUM('.$this->matrixSupport->transactionRevenueExpr().') as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume",0)) as points'),
                 DB::raw('COUNT(DISTINCT co.client) as cl'),
                 DB::raw('COUNT(DISTINCT co.consultant) as fc'),

@@ -61,9 +61,9 @@ class ProductSalesMatrixController extends Controller
                 'pg.id   as program_id',
                 'pg.name as program_name',
                 DB::raw('COALESCE(pg."providerName", \'—\') as supplier'),
-                DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
+                DB::raw('SUM('.->matrixSupport->transactionVolumeExpr().') as volume'),
                 DB::raw('COUNT(DISTINCT co.id)                as contract_count'),
-                DB::raw('SUM(COALESCE(t."commissionsAmountRUB", 0))  as revenue'),
+                DB::raw('SUM('.->matrixSupport->transactionRevenueExpr().') as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points'),
                 DB::raw('COUNT(DISTINCT co.consultant)         as fc_count'),
                 DB::raw('COUNT(DISTINCT co.client)             as client_count'),
@@ -169,9 +169,9 @@ class ProductSalesMatrixController extends Controller
         }
 
         $totalsRow = $totalsQ->selectRaw('
-            SUM(COALESCE(t."amountRUB", 0))      as volume,
+            SUM('.$this->matrixSupport->transactionVolumeExpr().') as volume,
             COUNT(DISTINCT co.id)                as contract_count,
-            SUM(COALESCE(t."commissionsAmountRUB", 0))  as revenue,
+            SUM('.$this->matrixSupport->transactionRevenueExpr().') as revenue,
             SUM(COALESCE(t."personalVolume", 0)) as points,
             COUNT(DISTINCT co.consultant)         as fc_count,
             COUNT(DISTINCT co.client)             as client_count
@@ -253,9 +253,9 @@ class ProductSalesMatrixController extends Controller
                 'p.id   as product_id',
                 'pg.id  as program_id',
                 't.dateMonth',
-                DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
+                DB::raw('SUM('.->matrixSupport->transactionVolumeExpr().') as volume'),
                 DB::raw('COUNT(DISTINCT co.id)                as contract_count'),
-                DB::raw('SUM(COALESCE(t."commissionsAmountRUB", 0))  as revenue'),
+                DB::raw('SUM('.->matrixSupport->transactionRevenueExpr().') as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points'),
                 DB::raw('COUNT(DISTINCT co.consultant)         as fc_count'),
                 DB::raw('COUNT(DISTINCT co.client)             as client_count'),
@@ -347,9 +347,9 @@ class ProductSalesMatrixController extends Controller
                 'pg.id                                                  as program_id',
                 'pg.name                                                as program_name',
                 't.dateMonth',
-                DB::raw('SUM(COALESCE(t."amountRUB",     0))           as volume'),
+                DB::raw('SUM('.->matrixSupport->transactionVolumeExpr().') as volume'),
                 DB::raw('COUNT(DISTINCT co.id)                          as cnt'),
-                DB::raw('SUM(COALESCE(t."commissionsAmountRUB", 0))           as revenue'),
+                DB::raw('SUM('.->matrixSupport->transactionRevenueExpr().') as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume",0))           as points'),
                 DB::raw('COUNT(DISTINCT co.client)                      as client_count'),
             ])
@@ -703,7 +703,13 @@ class ProductSalesMatrixController extends Controller
         $months = $this->matrixSupport->monthRange($from, $to);
 
         // Базовый builder: транзакции внутри периода по месяцу транзакции (dateMonth).
-        // amountRUB/netRevenueRUB уже в рублях — конвертация валют не нужна.
+        //
+        // ⚠ Объём и выручка пересчитываются по УПРАВЛЕНЧЕСКОМУ курсу месяца
+        // (раздел «Курсы валют для отчётов»), а не берутся из amountRUB.
+        // В amountRUB зашит курс на момент платежа, и «Факт» жил по одному
+        // курсу, а соседние «В работе» и «Активировано» — по управленческому.
+        // Замер 23.09.2026 за III квартал: объём 712,8 → 720,8 млн (+1,13%),
+        // выручка 17,20 → 17,48 млн (+1,62%). Рублёвые транзакции не меняются.
         $base = fn () => DB::table('transaction as t')
             ->join('contract as co', 'co.id', '=', 't.contract')
             ->join('program as pg', 'pg.id', '=', 'co.program')
@@ -726,14 +732,14 @@ class ProductSalesMatrixController extends Controller
                 'pg.id   as program_id',
                 'pg.name as program_name',
                 't.dateMonth as period_month',
-                DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
+                DB::raw('SUM('.$this->matrixSupport->transactionVolumeExpr().') as volume'),
                 // КОЛ-ВО — это КОНТРАКТЫ, а не транзакции. По одному контракту
                 // за месяц проходит несколько транзакций, и COUNT(DISTINCT t.id)
                 // завышал счётчик, а за ним и средний чек (объём ÷ кол-во).
                 // Замер 23.09.2026 за III квартал: 3 722 транзакции против
                 // 2 203 контрактов — завышение на 69%.
                 DB::raw('COUNT(DISTINCT co.id)                as cnt'),
-                DB::raw('SUM(COALESCE(t."commissionsAmountRUB", 0))  as revenue'),
+                DB::raw('SUM('.$this->matrixSupport->transactionRevenueExpr().') as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points'),
                 DB::raw('COUNT(DISTINCT co.client)            as client_count'),
                 DB::raw('COUNT(DISTINCT co.consultant)        as fc_count'),
@@ -1798,7 +1804,10 @@ class ProductSalesMatrixController extends Controller
                 'co.product as pid',
                 'co.number as contract_number',
                 't.id as tx_id',
-                DB::raw('COALESCE(t."amountRUB", 0) as amount'),
+                // По управленческому курсу, как и сами ячейки: иначе сумма в
+                // подсказке не сойдётся с цифрой, ради проверки которой её и
+                // открывают.
+                DB::raw('('.$this->matrixSupport->transactionVolumeExpr().') as amount'),
                 't.dateMonth as month',
                 'co.clientName as client_name',
             ])

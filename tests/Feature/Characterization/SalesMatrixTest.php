@@ -32,6 +32,8 @@ class SalesMatrixTest extends TestCase
     private const PROGRAM = 2000020;
     private const PARTNER = 2000030;
     private const CLIENT = 2000040;
+    /** Рубль: управленческого курса нет — лесенка фолбэков даёт единицу. */
+    private const CURRENCY_RUB = 2000060;
 
     private User $admin;
     private int $seq = 2000100;
@@ -64,6 +66,57 @@ class SalesMatrixTest extends TestCase
         $this->assertEqualsWithDelta(500, $grand['points'], 0.01, 'баллы = personalVolume');
         // Средний чек — производное поле: объём делится на число КОНТРАКТОВ.
         $this->assertEqualsWithDelta(1_000_000, $grand['avgCheck'], 0.01);
+    }
+
+    /**
+     * ⚠ Валютная транзакция пересчитывается УПРАВЛЕНЧЕСКИМ курсом месяца, а не
+     * тем курсом, по которому её провели.
+     *
+     * В транзакции лежит собственный курс (currencyRate) и посчитанный по нему
+     * amountRUB — это курс на день платежа. Отчёт обязан считать по курсу из
+     * раздела «Курсы валют для отчётов», иначе «Факт» живёт по одному курсу, а
+     * соседние «В работе» и «Активировано» — по другому.
+     *
+     * Выручка идёт тем же путём, но обходным: колонка выручки в валюте на
+     * проде не заполнена, поэтому валютная сумма восстанавливается делением
+     * рублёвой на курс транзакции.
+     */
+    #[Test]
+    public function fact_converts_currency_by_the_management_rate(): void
+    {
+        DB::table('currency')->updateOrInsert(['id' => 2000051],
+            ['symbol' => '$', 'nameRu' => 'Доллар фактовый', 'selectable' => false]);
+        DB::table('management_currency_rate')->insert([
+            'currency' => 2000051, 'date' => '2026-03-01', 'rate' => 80,
+        ]);
+
+        // Платёж провели по курсу 70: 1 000 долларов = 70 000 ₽ в транзакции.
+        $this->transaction([
+            'dateMonth' => '2026-03',
+            'currency' => 2000051, 'currencyRate' => 70,
+            'amount' => 1_000, 'amountRUB' => 70_000,
+            'commissionsAmountRUB' => 7_000,
+        ]);
+
+        $grand = $this->fact('2026-03', '2026-03')['grandTotals'];
+
+        $this->assertEqualsWithDelta(80_000, $grand['volume'], 0.01,
+            '1 000 × управленческий курс 80, а не × 70 из транзакции');
+        $this->assertEqualsWithDelta(8_000, $grand['revenue'], 0.01,
+            'выручка 7 000 ₽ по курсу 70 — это 100 $, а по курсу отчёта 8 000 ₽');
+    }
+
+    /** Рублёвая транзакция проходит пересчёт без изменений. */
+    #[Test]
+    public function fact_leaves_rouble_transactions_untouched(): void
+    {
+        $this->transaction(['dateMonth' => '2026-03', 'amountRUB' => 500_000,
+            'commissionsAmountRUB' => 25_000]);
+
+        $grand = $this->fact('2026-03', '2026-03')['grandTotals'];
+
+        $this->assertEqualsWithDelta(500_000, $grand['volume'], 0.01);
+        $this->assertEqualsWithDelta(25_000, $grand['revenue'], 0.01);
     }
 
     /**
@@ -575,7 +628,11 @@ class SalesMatrixTest extends TestCase
     private function transaction(array $attrs, ?int $contractId = null): int
     {
         $id = $this->seq++;
-        DB::table('transaction')->insert(array_merge([
+        // ⚠ Валюта и курс обязательны: отчёт считает объём и выручку не из
+        // amountRUB, а из суммы в валюте, умноженной на управленческий курс
+        // месяца. По умолчанию — рубли с курсом единица, поэтому amount
+        // совпадает с amountRUB и прежние проверки не меняются.
+        $row = array_merge([
             'id' => $id,
             'contract' => $contractId ?? $this->contractForTransactions(),
             'dateMonth' => '2026-03',
@@ -583,7 +640,13 @@ class SalesMatrixTest extends TestCase
             'commissionsAmountRUB' => 0,
             'netRevenueRUB' => 0,
             'personalVolume' => 0,
-        ], $attrs));
+            'currency' => self::CURRENCY_RUB,
+            'currencyRate' => 1,
+        ], $attrs);
+        // Держим связь amountRUB = amount × currencyRate — ту же, что на проде.
+        $row['amount'] ??= (float) $row['amountRUB'] / ((float) $row['currencyRate'] ?: 1);
+
+        DB::table('transaction')->insert($row);
 
         return $id;
     }
@@ -605,6 +668,12 @@ class SalesMatrixTest extends TestCase
         $this->admin->role = 'admin';
         $this->admin->password = bcrypt('secret123');
         $this->admin->save();
+
+        // Валюта транзакций по умолчанию. Управленческого курса для неё не
+        // заводим намеренно: лесенка фолбэков возвращает единицу, и рублёвые
+        // суммы проходят через пересчёт без изменений.
+        DB::table('currency')->updateOrInsert(['id' => self::CURRENCY_RUB],
+            ['symbol' => '₽', 'nameRu' => 'Рубль тестовый', 'selectable' => false]);
 
         DB::table('products_catalog')->insert([
             'id' => self::PRODUCT, 'name' => 'Матричный продукт', 'active' => true,

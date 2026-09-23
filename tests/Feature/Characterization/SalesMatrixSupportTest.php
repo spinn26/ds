@@ -75,6 +75,39 @@ class SalesMatrixSupportTest extends TestCase
         $this->assertStringEndsWith('1))', $sql, 'последний фолбэк — единица');
     }
 
+    /**
+     * Курс транзакции — та же лесенка, но по валюте ТРАНЗАКЦИИ и месяцу
+     * отчёта. Валюта транзакции и валюта контракта совпадают не всегда: за III
+     * квартал 2026 они разошлись у 56 транзакций из 3 724.
+     */
+    #[Test]
+    public function the_transaction_rate_expression_keys_on_the_transaction(): void
+    {
+        $sql = $this->support->transactionRateExpr();
+
+        $this->assertStringContainsString('t.currency', $sql, 'валюта берётся у транзакции');
+        $this->assertStringNotContainsString('co.currency', $sql, 'а не у контракта');
+        $this->assertStringContainsString('dateMonth', $sql, 'месяц — тот, в котором транзакция в отчёте');
+        $this->assertSame(2, substr_count($sql, 'management_currency_rate'),
+            'две ступени: курс на месяц и ближайший более ранний');
+        $this->assertStringEndsWith('1))', $sql, 'последний фолбэк — единица');
+    }
+
+    /**
+     * Выручка восстанавливается из рублёвой суммы делением на курс транзакции:
+     * колонка выручки в валюте на проде не заполнена ни у одной транзакции.
+     * Деление защищено от нуля — иначе упал бы весь отчёт, а не одна ячейка.
+     */
+    #[Test]
+    public function the_revenue_expression_guards_against_a_zero_rate(): void
+    {
+        $sql = $this->support->transactionRevenueExpr();
+
+        $this->assertStringContainsString('commissionsAmountRUB', $sql);
+        $this->assertStringContainsString('NULLIF', $sql, 'деление на ноль закрыто');
+        $this->assertStringContainsString('management_currency_rate', $sql);
+    }
+
     /** Поставщик резолвится каскадом, а не одной колонкой. */
     #[Test]
     public function the_supplier_expression_is_a_cascade(): void

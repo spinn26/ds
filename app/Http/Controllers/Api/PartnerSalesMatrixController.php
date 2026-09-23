@@ -200,16 +200,22 @@ class PartnerSalesMatrixController extends Controller
                 'p.id as product_id',
                 'p.name as product_name',
                 't.dateMonth as period_month',
-                DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
+                // Объём — по управленческому курсу месяца отчёта, а не по
+                // курсу платежа, зашитому в amountRUB. Так же считают соседние
+                // состояния «В работе» и «Активировано», иначе вкладки
+                // расходятся между собой (см. SalesMatrixSupport).
+                DB::raw('SUM('.$this->matrixSupport->transactionVolumeExpr().') as volume'),
                 // КОЛ-ВО — контракты, а не транзакции: по одному контракту за
                 // месяц проходит несколько транзакций, и счётчик вместе со
                 // средним чеком (объём ÷ кол-во) завышался. То же исправлено в
                 // продуктовой матрице и в слое «Факт» вкладки «Итого».
                 DB::raw('COUNT(DISTINCT co.id)                as cnt'),
-                // Выручка «Факт» = доход ДС без НДС из транзакции (commissionsAmountRUB),
-                // берём как есть — «чистый факт» (реш. Лены 2026-07-31). Раньше тут был
-                // netRevenueRUB (сумма без НДС клиента) — это НЕ доход ДС, завышало в ~14×.
-                DB::raw('SUM(COALESCE(t."commissionsAmountRUB", 0)) as revenue'),
+                // Выручка «Факт» = доход ДС без НДС из транзакции
+                // (commissionsAmountRUB) — «чистый факт», реш. Лены 2026-07-31.
+                // Раньше тут был netRevenueRUB (сумма без НДС клиента) — это НЕ
+                // доход ДС, завышало в ~14×. Теперь ещё и пересчитывается по
+                // управленческому курсу месяца, как объём.
+                DB::raw('SUM('.$this->matrixSupport->transactionRevenueExpr().') as revenue'),
                 // Баллы ЛП (личные) = personalVolume из транзакций (= доход ДС ÷ 100).
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as bally'),
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as bally_lp'),
