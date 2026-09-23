@@ -727,7 +727,12 @@ class ProductSalesMatrixController extends Controller
                 'pg.name as program_name',
                 't.dateMonth as period_month',
                 DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
-                DB::raw('COUNT(DISTINCT t.id)                 as cnt'),
+                // КОЛ-ВО — это КОНТРАКТЫ, а не транзакции. По одному контракту
+                // за месяц проходит несколько транзакций, и COUNT(DISTINCT t.id)
+                // завышал счётчик, а за ним и средний чек (объём ÷ кол-во).
+                // Замер 23.09.2026 за III квартал: 3 722 транзакции против
+                // 2 203 контрактов — завышение на 69%.
+                DB::raw('COUNT(DISTINCT co.id)                as cnt'),
                 DB::raw('SUM(COALESCE(t."commissionsAmountRUB", 0))  as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points'),
                 DB::raw('COUNT(DISTINCT co.client)            as client_count'),
@@ -1038,8 +1043,27 @@ class ProductSalesMatrixController extends Controller
             ->groupBy('co.product')->get()->keyBy('product_id');
         $grand['clientCount'] = (int) $base()->distinct()->count('co.client');
 
-        // Производные поля: avgCheck и fcCount на уровне продукта/гранда
+        // Контракты за ПЕРИОД — тоже distinct, по той же причине, что ФК и
+        // клиенты. Контракт с транзакциями в нескольких месяцах попадает в
+        // ячейку каждого из них — для ячейки это верно, но суммировать такие
+        // ячейки в колонку «Итого» нельзя: контракт посчитается дважды.
+        // Замер 23.09.2026: за III квартал таких контрактов 611 из 2 203.
+        //
+        // Ячейки продукт×месяц и итог месяца по всем продуктам суммированием
+        // считать МОЖНО: контракт принадлежит ровно одной программе и ровно
+        // одному продукту, внутри месяца задвоения не возникает.
+        $contractProgramTotals = $base()
+            ->select('pg.id as program_id', DB::raw('COUNT(DISTINCT co.id) as c'))
+            ->groupBy('pg.id')->get()->pluck('c', 'program_id');
+        $contractProductTotals = $base()
+            ->select('co.product as product_id', DB::raw('COUNT(DISTINCT co.id) as c'))
+            ->groupBy('co.product')->get()->pluck('c', 'product_id');
+        $grand['count'] = (int) $base()->distinct()->count('co.id');
+
+        // Производные поля: avgCheck и fcCount на уровне продукта/гранда.
+        // Счётчик контрактов проставляем ДО среднего чека — он на него делится.
         foreach ($productMap as $pid => &$prod) {
+            $prod['count']    = (int) ($contractProductTotals[$pid] ?? $prod['count']);
             $prod['avgCheck'] = $prod['count'] > 0 ? round($prod['volume'] / $prod['count'], 2) : 0;
             foreach ($prod['monthly'] as $mo => &$mv) {
                 $mv['avgCheck']    = $mv['count'] > 0 ? round($mv['volume'] / $mv['count'], 2) : 0;
@@ -1047,7 +1071,8 @@ class ProductSalesMatrixController extends Controller
                 $mv['clientCount'] = $clMonthlyIdx[$pid][$mo] ?? 0;
             }
             unset($mv);
-            foreach ($prod['programs'] as &$prog) {
+            foreach ($prod['programs'] as $pgid => &$prog) {
+                $prog['count']    = (int) ($contractProgramTotals[$pgid] ?? $prog['count']);
                 $prog['avgCheck'] = $prog['count'] > 0 ? round($prog['volume'] / $prog['count'], 2) : 0;
             }
             unset($prog);
@@ -1556,10 +1581,18 @@ class ProductSalesMatrixController extends Controller
         // и продукт×месяц (union по слоям).
         $dc  = $this->assembler->totalDistinctCounts($inworkBase, $actBase, $factBase);
         $cnt = fn ($set) => is_array($set) ? count($set) : 0;
+        // ⚠ Кол-во контрактов за ПЕРИОД перезаписываем по той же причине: в
+        // слое «Факт» период — месяц транзакции, и контракт, по которому
+        // транзакции прошли в разных месяцах, суммированием посчитался бы
+        // дважды. Месячные ячейки не трогаем: внутри месяца задвоения нет —
+        // контракт принадлежит одному продукту и лежит ровно в одном слое.
+        // Средний чек пересчитываем следом: он делится на это число.
         foreach ($result as &$prodRow) {
             $pid = $prodRow['productId'];
             $prodRow['fcCount']     = $cnt($dc['p'][$pid]['fc'] ?? null);
             $prodRow['clientCount'] = $cnt($dc['p'][$pid]['cl'] ?? null);
+            $prodRow['count']       = $cnt($dc['p'][$pid]['co'] ?? null) ?: $prodRow['count'];
+            $prodRow['avgCheck']    = $prodRow['count'] > 0 ? round($prodRow['volume'] / $prodRow['count'], 2) : 0;
             foreach ($prodRow['monthly'] as $m => &$mc) {
                 $mc['fcCount']     = $cnt($dc['pm'][$pid][$m]['fc'] ?? null);
                 $mc['clientCount'] = $cnt($dc['pm'][$pid][$m]['cl'] ?? null);
@@ -1569,12 +1602,16 @@ class ProductSalesMatrixController extends Controller
                 $lk = $layerRow['programId']; // fact | activated | inwork
                 $layerRow['fcCount']     = $cnt($dc['pl'][$pid][$lk]['fc'] ?? null);
                 $layerRow['clientCount'] = $cnt($dc['pl'][$pid][$lk]['cl'] ?? null);
+                $layerRow['count']       = $cnt($dc['pl'][$pid][$lk]['co'] ?? null) ?: $layerRow['count'];
+                $layerRow['avgCheck']    = $layerRow['count'] > 0 ? round($layerRow['volume'] / $layerRow['count'], 2) : 0;
             }
             unset($layerRow);
         }
         unset($prodRow);
         $grand['fcCount']     = $cnt($dc['g']['fc'] ?? null);
         $grand['clientCount'] = $cnt($dc['g']['cl'] ?? null);
+        $grand['count']       = $cnt($dc['g']['co'] ?? null) ?: $grand['count'];
+        $grand['avgCheck']    = $grand['count'] > 0 ? round($grand['volume'] / $grand['count'], 2) : 0;
         foreach ($grand['monthly'] as $m => &$gm) {
             $gm['fcCount']     = $cnt($dc['mo'][$m]['fc'] ?? null);
             $gm['clientCount'] = $cnt($dc['mo'][$m]['cl'] ?? null);

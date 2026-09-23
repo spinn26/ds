@@ -201,7 +201,11 @@ class PartnerSalesMatrixController extends Controller
                 'p.name as product_name',
                 't.dateMonth as period_month',
                 DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
-                DB::raw('COUNT(DISTINCT t.id)                 as cnt'),
+                // КОЛ-ВО — контракты, а не транзакции: по одному контракту за
+                // месяц проходит несколько транзакций, и счётчик вместе со
+                // средним чеком (объём ÷ кол-во) завышался. То же исправлено в
+                // продуктовой матрице и в слое «Факт» вкладки «Итого».
+                DB::raw('COUNT(DISTINCT co.id)                as cnt'),
                 // Выручка «Факт» = доход ДС без НДС из транзакции (commissionsAmountRUB),
                 // берём как есть — «чистый факт» (реш. Лены 2026-07-31). Раньше тут был
                 // netRevenueRUB (сумма без НДС клиента) — это НЕ доход ДС, завышало в ~14×.
@@ -211,6 +215,10 @@ class PartnerSalesMatrixController extends Controller
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as bally_lp'),
                 DB::raw('COUNT(DISTINCT co.client)            as client_count'),
                 DB::raw("string_agg(DISTINCT co.client::text, ',') as client_ids"),
+                // id контрактов ячейки — для distinct-подсчёта за период: в
+                // «Факте» период считается по месяцу транзакции, и контракт с
+                // транзакциями в разных месяцах суммой посчитался бы дважды.
+                DB::raw("string_agg(DISTINCT co.id::text, ',')     as contract_ids"),
                 DB::raw("'fact'                               as state"),
             ])
             ->groupBy('co.consultant', 'cons.personName', 'p.id', 'p.name', 't.dateMonth')
@@ -279,6 +287,10 @@ class PartnerSalesMatrixController extends Controller
                 DB::raw('0                                as bally_lp'),
                 DB::raw('COUNT(DISTINCT co.client)        as client_count'),
                 DB::raw("string_agg(DISTINCT co.client::text, ',') as client_ids"),
+                // Здесь период — месяц создания или активации, контракт
+                // попадает ровно в один, но множество собираем единообразно
+                // со слоем «Факт»: дальше уровни считают по нему.
+                DB::raw("string_agg(DISTINCT co.id::text, ',')     as contract_ids"),
                 DB::raw("'{$mode}'                        as state"),
             ])
             ->groupBy('co.consultant', 'cons.personName', 'p.id', 'p.name', $periodTrunc)
@@ -589,6 +601,9 @@ class PartnerSalesMatrixController extends Controller
             ];
             // id клиентов ячейки — для distinct-подсчёта (см. emptyAgg/finalizeNode).
             $cids = ($r->client_ids ?? '') !== '' ? explode(',', (string) $r->client_ids) : [];
+            // id контрактов ячейки — тем же порядком: итог за период считается
+            // по множеству, а не суммой ячеек.
+            $coids = ($r->contract_ids ?? '') !== '' ? explode(',', (string) $r->contract_ids) : [];
 
             if (! isset($structures[$rid])) {
                 $structures[$rid] = array_merge($this->emptyAgg(), [
@@ -646,6 +661,15 @@ class PartnerSalesMatrixController extends Controller
                 $S['clientSet'][$cid] = true; $S['monthlyClients'][$mo][$cid] = true;
                 $grand['clientSet'][$cid] = true; $grand['monthlyClients'][$mo][$cid] = true;
             }
+            // Контракты — так же. Помесячные ячейки при этом остаются суммой
+            // (внутри месяца контракт встречается один раз), а итог за период
+            // берётся из множества: см. finalizeNode.
+            foreach ($coids as $coid) {
+                $P['contractSet'][$coid] = true;
+                $F['contractSet'][$coid] = true;
+                $S['contractSet'][$coid] = true;
+                $grand['contractSet'][$coid] = true;
+            }
             // ФК по месяцам — distinct id ФК (для колонки «ФК» в помесячном виде).
             $P['monthlyFcs'][$mo][$fcId] = true;
             $F['monthlyFcs'][$mo][$fcId] = true;
@@ -697,6 +721,10 @@ class PartnerSalesMatrixController extends Controller
             // продуктах/месяцах/ФК, задваивается. clientSet — за весь период,
             // monthlyClients — по месяцам. Разворачиваются в число в finalizeNode.
             'clientSet' => [], 'monthlyClients' => [],
+            // Контракты — тем же приёмом: в «Факте» период считается по месяцу
+            // транзакции, и контракт с транзакциями в разных месяцах при
+            // суммировании ячеек посчитался бы дважды.
+            'contractSet' => [],
             // ФК по месяцам — distinct id ФК. Нужно для колонки «ФК» в
             // ПОМЕСЯЧНОМ виде (год/квартал/диапазон): раньше monthly.fcCount не
             // заполнялся → ФК показывался 0. Итоговый fcCount берётся из fcSet.
@@ -707,6 +735,9 @@ class PartnerSalesMatrixController extends Controller
     /** Доп. поля узла: средний чек + кол-во ФК (явно) + distinct-клиенты. */
     private function finalizeNode(array $node, int $fcCount): array
     {
+        // Кол-во за период — по множеству контрактов, а не суммой ячеек.
+        // Средний чек делится уже на него.
+        $node['count'] = count($node['contractSet'] ?? []) ?: ($node['count'] ?? 0);
         $node['avgCheck'] = $node['count'] > 0 ? round($node['volume'] / $node['count'], 2) : 0;
         $node['fcCount'] = $fcCount;
         $node['clientCount'] = count($node['clientSet'] ?? []);
@@ -721,7 +752,7 @@ class PartnerSalesMatrixController extends Controller
             $node['monthly'][$mo]['clientCount'] = count($node['monthlyClients'][$mo] ?? []);
             $node['monthly'][$mo]['fcCount'] = count($node['monthlyFcs'][$mo] ?? []);
         }
-        unset($node['fcSet'], $node['clientSet'], $node['monthlyClients'], $node['monthlyFcs']);
+        unset($node['fcSet'], $node['clientSet'], $node['monthlyClients'], $node['monthlyFcs'], $node['contractSet']);
         return $node;
     }
 

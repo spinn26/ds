@@ -513,7 +513,11 @@ class SalesMatrixAssembler
                 // расходился с партнёрским отчётом). Кол-во/выручка/баллы — уже
                 // per-transaction, поэтому совпадали.
                 DB::raw('SUM(COALESCE(t."amountRUB",0)) as volume'),
-                DB::raw('COUNT(DISTINCT t.id) as cnt'),
+                // Кол-во = контракты, а не транзакции: по контракту за месяц
+                // проходит несколько транзакций. Слои «Активировано» и «В
+                // работе» рядом считают именно контракты — иначе «Итого»
+                // складывало бы разные единицы измерения.
+                DB::raw('COUNT(DISTINCT co.id) as cnt'),
                 DB::raw('SUM(COALESCE(t."commissionsAmountRUB",0)) as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume",0)) as points'),
                 DB::raw('COUNT(DISTINCT co.client) as cl'),
@@ -544,9 +548,13 @@ class SalesMatrixAssembler
      */
     public function totalDistinctCounts(callable $inworkBase, callable $actBase, callable $factBase): array
     {
-        $pm = []; $p = []; $mo = []; $g = ['fc' => [], 'cl' => []]; $pl = [];
-        $add = function ($pid, $m, $layer, $fc, $cl) use (&$pm, &$p, &$mo, &$g, &$pl) {
-            foreach (['fc' => $fc, 'cl' => $cl] as $f => $id) {
+        // Контракты (co) считаем тем же механизмом, что ФК и клиентов: в слое
+        // «Факт» период — месяц ТРАНЗАКЦИИ, и контракт с транзакциями в разных
+        // месяцах попадает в несколько ячеек. Для ячейки это верно, а для
+        // итогов слоя, продукта и гранда суммирование задвоило бы его.
+        $pm = []; $p = []; $mo = []; $g = ['fc' => [], 'cl' => [], 'co' => []]; $pl = [];
+        $add = function ($pid, $m, $layer, $fc, $cl, $co) use (&$pm, &$p, &$mo, &$g, &$pl) {
+            foreach (['fc' => $fc, 'cl' => $cl, 'co' => $co] as $f => $id) {
                 if ($id === null) continue;
                 $pm[$pid][$m][$f][$id] = 1;
                 $p[$pid][$f][$id] = 1;
@@ -561,14 +569,15 @@ class SalesMatrixAssembler
                 DB::raw($periodSql.' as m'),
                 'co.consultant as fc',
                 'co.client as cl',
+                'co.id as co_id',
             ])->get() as $r) {
-                $add($r->pid, $r->m, $layer, $r->fc, $r->cl);
+                $add($r->pid, $r->m, $layer, $r->fc, $r->cl, $r->co_id);
             }
         };
         $pull($inworkBase, 'TO_CHAR(DATE_TRUNC(\'month\', co."createDate"::date), \'YYYY-MM\')', 'inwork');
         $pull($actBase,    'TO_CHAR(DATE_TRUNC(\'month\', co."openDate"::date), \'YYYY-MM\')', 'activated');
-        foreach ($factBase()->select(['co.product as pid', 't.dateMonth as m', 'co.consultant as fc', 'co.client as cl'])->get() as $r) {
-            $add($r->pid, $r->m, 'fact', $r->fc, $r->cl);
+        foreach ($factBase()->select(['co.product as pid', 't.dateMonth as m', 'co.consultant as fc', 'co.client as cl', 'co.id as co_id'])->get() as $r) {
+            $add($r->pid, $r->m, 'fact', $r->fc, $r->cl, $r->co_id);
         }
 
         return compact('pm', 'p', 'mo', 'g', 'pl');

@@ -62,8 +62,57 @@ class SalesMatrixTest extends TestCase
         $this->assertEqualsWithDelta(50_000, $grand['revenue'], 0.01, 'выручка = доход ДС');
         $this->assertEqualsWithDelta(1_000_000, $grand['volume'], 0.01, 'объём = сумма контрактов');
         $this->assertEqualsWithDelta(500, $grand['points'], 0.01, 'баллы = personalVolume');
-        // Средний чек — производное поле: объём делится на число транзакций.
+        // Средний чек — производное поле: объём делится на число КОНТРАКТОВ.
         $this->assertEqualsWithDelta(1_000_000, $grand['avgCheck'], 0.01);
+    }
+
+    /**
+     * ⚠ Кол-во в «Факте» — это контракты, а не транзакции.
+     *
+     * По одному контракту за месяц проходит несколько транзакций. Пока
+     * считались транзакции, счётчик завышался (на проде 23.09.2026 — 3 722
+     * против 2 203 за квартал, +69%), а за ним и средний чек: объём делится
+     * именно на это число.
+     */
+    #[Test]
+    public function fact_counts_contracts_not_transactions(): void
+    {
+        $contract = $this->contract();
+        $this->transaction(['dateMonth' => '2026-03', 'amountRUB' => 600_000], $contract);
+        $this->transaction(['dateMonth' => '2026-03', 'amountRUB' => 400_000], $contract);
+
+        $grand = $this->fact('2026-03', '2026-03')['grandTotals'];
+
+        $this->assertSame(1, $grand['count'], 'две транзакции одного контракта — это один контракт');
+        $this->assertEqualsWithDelta(1_000_000, $grand['volume'], 0.01, 'объём складывается по транзакциям');
+        $this->assertEqualsWithDelta(1_000_000, $grand['avgCheck'], 0.01, 'средний чек = объём ÷ контракты');
+    }
+
+    /**
+     * ⚠ Контракт с транзакциями в разных месяцах попадает в ячейку каждого,
+     * но в колонке «Итого» считается один раз.
+     *
+     * Ячейку суммировать можно, итог за период — нельзя: на проде таких
+     * контрактов 611 из 2 203 за квартал.
+     */
+    #[Test]
+    public function fact_does_not_double_count_a_contract_across_months(): void
+    {
+        $contract = $this->contract();
+        $this->transaction(['dateMonth' => '2026-03', 'amountRUB' => 300_000], $contract);
+        $this->transaction(['dateMonth' => '2026-04', 'amountRUB' => 700_000], $contract);
+
+        $body  = $this->fact('2026-03', '2026-04');
+        $grand = $body['grandTotals'];
+
+        $this->assertSame(1, $grand['monthly']['2026-03']['count'], 'в марте контракт один');
+        $this->assertSame(1, $grand['monthly']['2026-04']['count'], 'в апреле тот же контракт');
+        $this->assertSame(1, $grand['count'], 'за период он один, а не два');
+        $this->assertEqualsWithDelta(1_000_000, $grand['avgCheck'], 0.01, 'средний чек не делится пополам');
+
+        $row = $body['rows'][0];
+        $this->assertSame(1, $row['count'], 'на строке продукта — тоже один');
+        $this->assertSame(1, $row['programs'][0]['count'], 'и на строке программы');
     }
 
     /** Строки раскладываются по месяцу транзакции, а не контракта. */
