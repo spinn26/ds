@@ -20,6 +20,12 @@
           <v-chip size="x-small" :color="levelColor('full')" variant="tonal" label>Полный</v-chip>
           <span class="text-caption text-medium-emphasis">+ удаление / системные действия</span>
         </div>
+        <!-- Пять ролей закрыты на запись на уровне сервера; матрица помечает
+             ячейки, где выбранный уровень до дела не дойдёт. -->
+        <div class="d-flex align-center ga-1">
+          <v-icon size="14" color="warning">mdi-alert-outline</v-icon>
+          <span class="text-caption text-medium-emphasis">уровень не сработает — роль read-only на сервере</span>
+        </div>
         <v-divider vertical class="mx-2" />
         <v-text-field v-model="filterText" placeholder="Поиск группы или раздела"
           density="compact" variant="outlined" hide-details clearable
@@ -115,6 +121,10 @@
                       :class="{ 'cell-chip--empty': !g.permissions[s.key], 'cell-chip--saving': savingCells[`${g.id}:${s.key}`] }">
                       <v-progress-circular v-if="savingCells[`${g.id}:${s.key}`]"
                         size="10" width="2" indeterminate class="me-1" />
+                      <!-- Уровень выбран, но сервер его не исполнит: роль под
+                           read-only гардом, раздел в исключения не входит. -->
+                      <v-icon v-if="writeBlocked(g, s.key)" size="13" start
+                        color="warning" :title="blockedHint(g)">mdi-alert-outline</v-icon>
                       <span>{{ levelLabel(g.permissions[s.key]) }}</span>
                       <v-icon size="12" end>mdi-chevron-down</v-icon>
                     </v-chip>
@@ -205,6 +215,34 @@ const sections = ref([]);
 const filterText = ref('');
 const savingCells = ref({});
 
+// Роли под сплошным read-only гардом на сервере: ключ роли → разделы, где
+// запись всё-таки доходит. Приходит с бэкенда (App\Support\WriteGuards).
+const writeGuards = ref({});
+
+/**
+ * Уровень в этой ячейке выбрать можно, но сервер его не исполнит: роль
+ * закрыта гардом, а раздел в список исключений не входит.
+ *
+ * Без этой пометки матрица врала молча: «Полный» на «Отчётах» у руководителя
+ * стоял, кнопка в кабинете показывалась, а генерация падала с 403 — и это
+ * выяснялось только когда человек нажимал.
+ */
+function writeBlocked(group, sectionKey) {
+  const allowed = writeGuards.value[group.key];
+  if (!allowed) return false;                       // роль без гарда
+  const level = group.permissions[sectionKey];
+  if (level !== 'edit' && level !== 'full') return false;
+  return !allowed.includes(sectionKey);
+}
+
+function blockedHint(group) {
+  const allowed = writeGuards.value[group.key] || [];
+  const where = allowed.length
+    ? `Писать эта роль может только в разделах: ${allowed.join(', ')}.`
+    : 'Писать эта роль не может ни в одном разделе.';
+  return `Уровень выше «Просмотра» здесь не сработает: на сервере роль закрыта на запись. ${where}`;
+}
+
 const cellOptions = [
   { value: '',     label: 'Нет доступа — раздел скрыт в меню' },
   { value: 'view', label: 'Только просмотр (read-only)' },
@@ -264,6 +302,7 @@ async function load() {
     const { data } = await api.get('/admin/permissions/groups');
     groups.value = data.groups || [];
     sections.value = data.sections || [];
+    writeGuards.value = data.writeGuards || {};
   } catch (e) {
     notify(e.response?.data?.message || 'Не удалось загрузить', 'error', 'mdi-alert');
   }

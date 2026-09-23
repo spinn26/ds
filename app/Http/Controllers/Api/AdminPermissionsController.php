@@ -54,6 +54,10 @@ class AdminPermissionsController extends Controller
             'groups' => $groups,
             'sections' => $this->knownSections(),
             'levels' => self::LEVELS,
+            // Роли под сплошным read-only гардом и разделы, где запись им всё
+            // же разрешена. Матрица помечает остальные ячейки: уровень выше
+            // «Просмотра» там можно выбрать, но сервер его не исполнит.
+            'writeGuards' => \App\Support\WriteGuards::SECTIONS,
         ]);
     }
 

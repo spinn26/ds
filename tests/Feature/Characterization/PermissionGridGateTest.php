@@ -98,6 +98,56 @@ class PermissionGridGateTest extends TestCase
         $this->assertNotSame(403, $status, 'полный уровень не должен упираться в права');
     }
 
+    // ---------------- Контентные разделы ----------------
+
+    /**
+     * Раздел → маршрут создания в нём.
+     *
+     * ⚠ До 22.09.2026 у этих маршрутов не было гейта вовсе: колонка в матрице
+     * управляла только видимостью пункта меню, а API принимал запись от любой
+     * роли без read-only гарда. Бэк-офис с «Просмотром» на каталоге продуктов
+     * мог править каталог через API.
+     *
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function contentRoutes(): array
+    {
+        return [
+            'конкурсы' => ['contests', '/api/v1/admin/contests'],
+            'инструкции' => ['instructions', '/api/v1/admin/instructions'],
+            'каталог продуктов' => ['products', '/api/v1/admin/products-catalog'],
+            'база знаний' => ['kb', '/api/v1/admin/kb/articles'],
+            'обучение' => ['education', '/api/v1/admin/education/courses'],
+        ];
+    }
+
+    /** «Просмотр» на контентном разделе запись не даёт. */
+    #[Test]
+    #[DataProvider('contentRoutes')]
+    public function a_content_section_refuses_a_view_level(string $section, string $url): void
+    {
+        $this->setLevel('backoffice', $section, 'view');
+
+        $this->call('POST', $url, [], [], [], $this->headers($this->user('backoffice')))
+            ->assertForbidden();
+    }
+
+    /**
+     * «Правка» — даёт. Дальше запрос упирается в валидацию, это уже не про
+     * права, поэтому проверяем только что ответ не 403.
+     */
+    #[Test]
+    #[DataProvider('contentRoutes')]
+    public function a_content_section_accepts_an_edit_level(string $section, string $url): void
+    {
+        $this->setLevel('backoffice', $section, 'edit');
+
+        $status = $this->call('POST', $url, [], [], [], $this->headers($this->user('backoffice')))
+            ->status();
+
+        $this->assertNotSame(403, $status, '«Правка» пропускает создание');
+    }
+
     // ---------------- Роли под сплошным read-only гардом ----------------
 
     /**

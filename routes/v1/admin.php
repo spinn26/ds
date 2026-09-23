@@ -506,12 +506,18 @@ Route::post('/admin/periods/reopen', [\App\Http\Controllers\Api\AdminPeriodContr
 Route::post('/admin/periods/visibility', [\App\Http\Controllers\Api\AdminPeriodController::class, 'setVisibility'])->middleware(['permission:reports-access,full', 'throttle:120,1']);
 Route::get('/admin/periods/{year}/{month}', [\App\Http\Controllers\Api\AdminPeriodController::class, 'check'])->whereNumber(['year', 'month']);
 
-// Admin References (generic CRUD for small reference tables)
+// Admin References (generic CRUD for small reference tables).
+//
+// Запись — role:admin, как и страница: /admin/* живёт под AdminLayout с
+// meta.admin, то есть справочники правит только администратор. До 22.09.2026
+// гейта не было вовсе — страницу видел один админ, а POST/PUT/DELETE принимал
+// от любой роли без read-only гарда (бэк-офис, финансы, расчёты). Секции в
+// матрице у справочников нет, поэтому закрываем ролью, а не уровнем.
 Route::get('/admin/references', [\App\Http\Controllers\Api\AdminReferenceController::class, 'catalogs']);
 Route::get('/admin/references/{catalog}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'index']);
-Route::post('/admin/references/{catalog}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'store']);
-Route::put('/admin/references/{catalog}/{id}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'update']);
-Route::delete('/admin/references/{catalog}/{id}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'destroy']);
+Route::post('/admin/references/{catalog}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'store'])->middleware('role:admin');
+Route::put('/admin/references/{catalog}/{id}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'update'])->middleware('role:admin');
+Route::delete('/admin/references/{catalog}/{id}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'destroy'])->middleware('role:admin');
 
 // News CRUD — секция прав «Новости и объявления» (config/permissions.php).
 // Раньше писать могли только роли с общим write-доступом: у чистого
@@ -526,9 +532,9 @@ Route::delete('/admin/news/{id}', [\App\Http\Controllers\Api\WorkspaceController
 // Admin Contests CRUD
 Route::get('/admin/contests', [\App\Http\Controllers\Api\AdminContestController::class, 'index']);
 Route::get('/admin/contests/references', [\App\Http\Controllers\Api\AdminContestController::class, 'references']);
-Route::post('/admin/contests', [\App\Http\Controllers\Api\AdminContestController::class, 'store']);
-Route::put('/admin/contests/{id}', [\App\Http\Controllers\Api\AdminContestController::class, 'update']);
-Route::delete('/admin/contests/{id}', [\App\Http\Controllers\Api\AdminContestController::class, 'destroy']);
+Route::post('/admin/contests', [\App\Http\Controllers\Api\AdminContestController::class, 'store'])->middleware('permission:contests,edit');
+Route::put('/admin/contests/{id}', [\App\Http\Controllers\Api\AdminContestController::class, 'update'])->middleware('permission:contests,edit');
+Route::delete('/admin/contests/{id}', [\App\Http\Controllers\Api\AdminContestController::class, 'destroy'])->middleware('permission:contests,full');
 
 // Admin Products CRUD
 Route::get('/admin/products/references', [\App\Http\Controllers\Api\AdminProductController::class, 'references']);
@@ -558,24 +564,24 @@ Route::get('/admin/products-catalog/references',     [\App\Http\Controllers\Api\
 // доступны всему staff.
 Route::get('/admin/products-catalog/programs',       [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'programsAll'])->middleware('role:admin');
 Route::get('/admin/products-catalog',                [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'indexProducts']);
-Route::post('/admin/products-catalog',               [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'storeProduct']);
+Route::post('/admin/products-catalog',               [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'storeProduct'])->middleware('permission:products,edit');
 Route::get('/admin/products-catalog/{id}',           [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'showProduct'])->whereNumber('id');
-Route::put('/admin/products-catalog/{id}',           [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'updateProduct'])->whereNumber('id');
-Route::delete('/admin/products-catalog/{id}',        [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'destroyProduct'])->whereNumber('id');
-Route::post('/admin/products-catalog/{id}/toggle-publish', [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'togglePublish'])->whereNumber('id');
-Route::post('/admin/products-catalog/{id}/image',    [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'uploadImage'])->whereNumber('id');
+Route::put('/admin/products-catalog/{id}',           [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'updateProduct'])->whereNumber('id')->middleware('permission:products,edit');
+Route::delete('/admin/products-catalog/{id}',        [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'destroyProduct'])->whereNumber('id')->middleware('permission:products,full');
+Route::post('/admin/products-catalog/{id}/toggle-publish', [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'togglePublish'])->whereNumber('id')->middleware('permission:products,edit');
+Route::post('/admin/products-catalog/{id}/image',    [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'uploadImage'])->whereNumber('id')->middleware('permission:products,edit');
 Route::get('/admin/products-catalog/{id}/programs',  [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'programs'])->whereNumber('id');
-Route::post('/admin/products-catalog/{id}/programs', [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'storeProgram'])->whereNumber('id');
-Route::put('/admin/products-catalog/{id}/programs/{programId}',    [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'updateProgram'])->whereNumber('id')->whereNumber('programId');
-Route::delete('/admin/products-catalog/{id}/programs/{programId}', [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'destroyProgram'])->whereNumber('id')->whereNumber('programId');
+Route::post('/admin/products-catalog/{id}/programs', [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'storeProgram'])->whereNumber('id')->middleware('permission:products,edit');
+Route::put('/admin/products-catalog/{id}/programs/{programId}',    [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'updateProgram'])->whereNumber('id')->whereNumber('programId')->middleware('permission:products,edit');
+Route::delete('/admin/products-catalog/{id}/programs/{programId}', [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'destroyProgram'])->whereNumber('id')->whereNumber('programId')->middleware('permission:products,full');
 Route::get('/admin/programs-catalog/{id}',           [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'showProgram'])->whereNumber('id');
 
 // Admin Education CRUD
 Route::get('/admin/instructions', [\App\Http\Controllers\Api\InstructionController::class, 'adminList']);
-Route::post('/admin/instructions', [\App\Http\Controllers\Api\InstructionController::class, 'adminStore']);
-Route::put('/admin/instructions/{id}', [\App\Http\Controllers\Api\InstructionController::class, 'adminUpdate'])->whereNumber('id');
-Route::delete('/admin/instructions/{id}', [\App\Http\Controllers\Api\InstructionController::class, 'adminDestroy'])->whereNumber('id');
-Route::post('/admin/instructions/upload', [\App\Http\Controllers\Api\InstructionController::class, 'adminUpload'])->middleware('throttle:60,1');
+Route::post('/admin/instructions', [\App\Http\Controllers\Api\InstructionController::class, 'adminStore'])->middleware('permission:instructions,edit');
+Route::put('/admin/instructions/{id}', [\App\Http\Controllers\Api\InstructionController::class, 'adminUpdate'])->whereNumber('id')->middleware('permission:instructions,edit');
+Route::delete('/admin/instructions/{id}', [\App\Http\Controllers\Api\InstructionController::class, 'adminDestroy'])->whereNumber('id')->middleware('permission:instructions,full');
+Route::post('/admin/instructions/upload', [\App\Http\Controllers\Api\InstructionController::class, 'adminUpload'])->middleware(['throttle:60,1', 'permission:instructions,edit']);
 Route::get('/admin/instructions/roles', [\App\Http\Controllers\Api\InstructionController::class, 'adminRoles']);
 
 // Анкеты партнёров (для куратора обучения и общего ознакомления)
@@ -586,39 +592,39 @@ Route::get('/admin/partners/{id}/questionnaire', [\App\Http\Controllers\Api\Admi
 Route::get('/admin/education/analytics', [\App\Http\Controllers\Api\AdminEducationController::class, 'analytics']);
 Route::get('/admin/education/analytics/export', [\App\Http\Controllers\Api\AdminEducationController::class, 'analyticsExport']);
 Route::get('/admin/education/categories', [\App\Http\Controllers\Api\AdminEducationController::class, 'categories']);
-Route::post('/admin/education/categories', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCategory']);
-Route::put('/admin/education/categories/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCategory'])->whereNumber('id');
-Route::delete('/admin/education/categories/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyCategory'])->whereNumber('id');
+Route::post('/admin/education/categories', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCategory'])->middleware('permission:education-categories,edit');
+Route::put('/admin/education/categories/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCategory'])->whereNumber('id')->middleware('permission:education-categories,edit');
+Route::delete('/admin/education/categories/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyCategory'])->whereNumber('id')->middleware('permission:education-categories,full');
 Route::get('/admin/education/product-options', [\App\Http\Controllers\Api\AdminEducationController::class, 'productOptions']);
 Route::get('/admin/education/program-options', [\App\Http\Controllers\Api\AdminEducationController::class, 'programOptions']);
 Route::get('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'courses']);
-Route::post('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCourse']);
-Route::put('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCourse']);
-Route::post('/admin/education/courses/{id}/move', [\App\Http\Controllers\Api\AdminEducationController::class, 'moveCourse'])->whereNumber('id');
+Route::post('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCourse'])->middleware('permission:education,edit');
+Route::put('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCourse'])->middleware('permission:education,edit');
+Route::post('/admin/education/courses/{id}/move', [\App\Http\Controllers\Api\AdminEducationController::class, 'moveCourse'])->whereNumber('id')->middleware('permission:education,edit');
 
 // Knowledge Base (admin CRUD для роли education)
 Route::get('/admin/kb/tree', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'tree']);
-Route::post('/admin/kb/sections', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'storeSection']);
-Route::put('/admin/kb/sections/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'updateSection'])->whereNumber('id');
-Route::delete('/admin/kb/sections/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'destroySection'])->whereNumber('id');
-Route::post('/admin/kb/sections/{id}/move', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'moveSection'])->whereNumber('id');
+Route::post('/admin/kb/sections', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'storeSection'])->middleware('permission:kb,edit');
+Route::put('/admin/kb/sections/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'updateSection'])->whereNumber('id')->middleware('permission:kb,edit');
+Route::delete('/admin/kb/sections/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'destroySection'])->whereNumber('id')->middleware('permission:kb,full');
+Route::post('/admin/kb/sections/{id}/move', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'moveSection'])->whereNumber('id')->middleware('permission:kb,edit');
 Route::get('/admin/kb/sections/{id}/articles', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'articles'])->whereNumber('id');
 Route::get('/admin/kb/articles/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'showArticle'])->whereNumber('id');
-Route::post('/admin/kb/articles', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'storeArticle']);
-Route::put('/admin/kb/articles/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'updateArticle'])->whereNumber('id');
-Route::delete('/admin/kb/articles/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'destroyArticle'])->whereNumber('id');
+Route::post('/admin/kb/articles', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'storeArticle'])->middleware('permission:kb,edit');
+Route::put('/admin/kb/articles/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'updateArticle'])->whereNumber('id')->middleware('permission:kb,edit');
+Route::delete('/admin/kb/articles/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'destroyArticle'])->whereNumber('id')->middleware('permission:kb,full');
 
 // Курация домашних заданий (роль education + admin)
 Route::get('/admin/kb/homework', [\App\Http\Controllers\Api\HomeworkController::class, 'queue']);
-Route::post('/admin/kb/homework/{id}/review', [\App\Http\Controllers\Api\HomeworkController::class, 'review'])->whereNumber('id');
-Route::delete('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyCourse']);
+Route::post('/admin/kb/homework/{id}/review', [\App\Http\Controllers\Api\HomeworkController::class, 'review'])->whereNumber('id')->middleware('permission:homework,edit');
+Route::delete('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyCourse'])->middleware('permission:education,full');
 Route::get('/admin/education/courses/{id}/lessons', [\App\Http\Controllers\Api\AdminEducationController::class, 'lessons'])->whereNumber('id');
-Route::post('/admin/education/courses/{id}/lessons', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeLesson'])->whereNumber('id');
-Route::put('/admin/education/courses/{id}/lessons/{lessonId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateLesson'])->whereNumber('id')->whereNumber('lessonId');
-Route::delete('/admin/education/courses/{id}/lessons/{lessonId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyLesson'])->whereNumber('id')->whereNumber('lessonId');
+Route::post('/admin/education/courses/{id}/lessons', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeLesson'])->whereNumber('id')->middleware('permission:education,edit');
+Route::put('/admin/education/courses/{id}/lessons/{lessonId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateLesson'])->whereNumber('id')->whereNumber('lessonId')->middleware('permission:education,edit');
+Route::delete('/admin/education/courses/{id}/lessons/{lessonId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyLesson'])->whereNumber('id')->whereNumber('lessonId')->middleware('permission:education,full');
 Route::get('/admin/education/courses/{id}/tests', [\App\Http\Controllers\Api\AdminEducationController::class, 'tests'])->whereNumber('id');
-Route::post('/admin/education/courses/{id}/tests', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeTest'])->whereNumber('id');
-Route::post('/admin/education/courses/{id}/tests/reorder', [\App\Http\Controllers\Api\AdminEducationController::class, 'reorderTests'])->whereNumber('id');
-Route::put('/admin/education/courses/{id}/tests/{testId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateTest'])->whereNumber('id')->whereNumber('testId');
-Route::delete('/admin/education/courses/{id}/tests/{testId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyTest'])->whereNumber('id')->whereNumber('testId');
+Route::post('/admin/education/courses/{id}/tests', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeTest'])->whereNumber('id')->middleware('permission:education,edit');
+Route::post('/admin/education/courses/{id}/tests/reorder', [\App\Http\Controllers\Api\AdminEducationController::class, 'reorderTests'])->whereNumber('id')->middleware('permission:education,edit');
+Route::put('/admin/education/courses/{id}/tests/{testId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateTest'])->whereNumber('id')->whereNumber('testId')->middleware('permission:education,edit');
+Route::delete('/admin/education/courses/{id}/tests/{testId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyTest'])->whereNumber('id')->whereNumber('testId')->middleware('permission:education,full');
 }); // end role:staff
